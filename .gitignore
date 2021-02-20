@@ -1,0 +1,9 @@
+.DS_Store
+__pycache__/
+.ipynb_checkpoints/
+local_files/
+local_db/
+data/
+remake_db.sh
+logfile
+proj-ds-app-handout.pdf
