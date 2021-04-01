@@ -1,9 +1,10 @@
 .DS_Store
 __pycache__/
 .ipynb_checkpoints/
+.vscode/
 local_files/
 local_db/
 data/
-remake_db.sh
 logfile
+remake_db.sh
 proj-ds-app-handout.pdf
