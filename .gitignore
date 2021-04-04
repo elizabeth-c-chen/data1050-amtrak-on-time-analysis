@@ -3,8 +3,9 @@ __pycache__/
 .ipynb_checkpoints/
 .vscode/
 local_files/
-local_db/
+project_db/
 data/
 logfile
-remake_db.sh
 proj-ds-app-handout.pdf
+remake_db.sh
+assets/

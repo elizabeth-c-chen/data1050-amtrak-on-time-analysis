@@ -107,12 +107,13 @@ def construct_urls(northbound_trains, southbound_trains, start_date, end_date):
             urls['Depart'].append( (station, URL_BASE + station + URL_END_DP) )
         for station in arrive + ['WAS']:
             urls['Arrive'].append( (station, URL_BASE + station + URL_END_AR) )   
-    return urls    
+    return urls
 
 
 def fetch_data_from_urls(urls):
     """
-    For each url in the urls dictionary, fetch the data and save it to a dictionary for later access.
+    For each url in the urls dictionary, fetch the data and save it to a
+    dictionary for later access.
     """
     raw_data = make_dict()
     start_time = time.time()
