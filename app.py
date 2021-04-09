@@ -11,9 +11,11 @@ import os
 
 app = dash.Dash(__name__)
 server = app.server
+app.title = 'DATA 1050 Project'
 
 mapbox_token = os.environ.get('MAPBOX_TOKEN')
 assert mapbox_token is not None, 'empty token'
+px.set_mapbox_access_token(mapbox_token)
 
 geo_route = pd.read_csv('./data/visualization/NE_regional_lonlat.csv')
 geo_info = pd.read_csv('./data/visualization/geo_stations_info.csv')
@@ -30,8 +32,6 @@ train_nums = [66, 67, 82, 83, 86, 88, 93, 94, 95, 99, 132, 135, 137, 139,
 
 map_style = 'outdoors'
 
-px.set_mapbox_access_token(mapbox_token)
-
 geo_route_path = geo_route['Connecting Path']
 route = px.line_mapbox(geo_route,
                        lat=geo_route['Latitude'],
@@ -43,7 +43,7 @@ route = px.line_mapbox(geo_route,
                        mapbox_style=map_style,
                        zoom=6)
 route.update_traces(line=dict(width=3))
-stn_name = geo_info.STNNAME
+
 route.add_trace(go.Scattermapbox(lat=geo_info.LAT.round(decimals=5),
                                  lon=geo_info.LON.round(decimals=5),
                                  name='Amtrak Stations',
@@ -55,7 +55,7 @@ route.add_trace(go.Scattermapbox(lat=geo_info.LAT.round(decimals=5),
                                  marker={'size': 6, 'color': 'Navy'},
                                  fill='none'
                                  )
-               )
+                )
 
 route.update_layout(dict(paper_bgcolor="white", plot_bgcolor="white", margin=dict(t=35, l=80, b=0, r=0), height=500)) # l=0, r=0
 route.update_yaxes(automargin=True)
@@ -151,8 +151,13 @@ app.layout = html.Div(children=[
         figure=route,
         style={'display': 'block', 'margin-left': '19%', 'margin-right': '15%'} # 'margin-left': 'auto', 'margin-right': 'auto', 'margin-top': 'auto', 'margin-bottom': 'auto',
     ),
-    
+    html.Div(children=[
+        html.Footer(children=[
+            html.P(children="You are visiting the portfolio of Elizabeth C. Chen, Master's student at Brown University. This webpage is not affiliated with Amtrak in any way.", style={'font-size': 12})]
+        )
+    ], style={'display': 'block', 'padding-left': '26%', 'padding-right': '24%'})
 ])
+
 
 @app.callback(
     dash.dependencies.Output('slider-output-container', 'children'),

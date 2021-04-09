@@ -1,0 +1,13 @@
+jupyterlab
+dash
+plotly
+plotly_express
+pandas
+shapely
+requests
+lxml
+geopandas
+matplotlib
+psycopg2
+ipython-sql
+gunicorn
