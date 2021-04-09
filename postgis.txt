@@ -1,0 +1,47 @@
+POSTGIS
+
+CREATE EXTENSION postgis;
+
+ALTER TABLE weather_hourly ADD COLUMN geom geometry(Point, 4326);
+UPDATE weather_hourly SET geom = ST_SetSRID(ST_MakePoint(longitude, latitude), 4326);
+
+
+ALTER TABLE station_info ADD COLUMN geom geometry(Point, 4326);
+UPDATE station_info SET geom = ST_SetSRID(ST_MakePoint(longitude, latitude), 4326);
+
+
+CREATE INDEX lonlat_index ON weather_hourly USING GIST (geom);
+
+
+
+ALTER TABLE test_dep ADD COLUMN latitude real;
+UPDATE test_dep
+SET  latitude = si.latitude
+FROM station_info si
+WHERE test_dep.station_code = si.station_code;
+
+
+ALTER TABLE test_dep ADD COLUMN longitude real;
+UPDATE test_dep
+SET  longitude = si.longitude
+FROM station_info si
+WHERE test_dep.station_code = si.station_code;
+
+
+ALTER TABLE departures ADD COLUMN latitude real;
+ALTER TABLE departures ADD COLUMN longitude real;
+
+UPDATE departures
+SET  latitude = si.latitude
+FROM station_info si
+WHERE departures.station_code = si.station_code;
+
+UPDATE departures
+SET  longitude = si.longitude
+FROM station_info si
+WHERE departures.station_code = si.station_code;
+
+ALTER TABLE departures ADD COLUMN geom geometry(Point, 4326);
+UPDATE departures SET geom = ST_SetSRID(ST_MakePoint(longitude, latitude), 4326);
+
+
