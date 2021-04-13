@@ -14,11 +14,13 @@ import plotly.express as px
 import plotly.graph_objects as go
 import plotly
 
+# Database setup
+assert os.environ.get('DATABASE_URL') is not None, 'database URL is not set!'
+
 
 # Helper Functions
 def connect_and_query(query):
-    db_string = "dbname='amtrakproject' user='appuser' password="
-    conn = psycopg2.connect(db_string + os.environ.get('DB_PASS'))
+    conn = psycopg2.connect(os.environ['DATABASE_URL'], sslmode='require')
     query_data = pd.read_sql(query, conn)
     conn.close()
     return query_data
@@ -115,9 +117,6 @@ app.title = 'DATA 1050 Project'
 # Mapbox setup
 assert os.environ.get('MAPBOX_TOKEN') is not None, 'empty mapbox token!'
 px.set_mapbox_access_token(os.environ.get('MAPBOX_TOKEN'))
-
-# Database setup
-assert os.environ.get('DB_PASS') is not None, 'empty database password!'
 
 # Load route and stations info through queries to database
 geo_info_query = dedent(
