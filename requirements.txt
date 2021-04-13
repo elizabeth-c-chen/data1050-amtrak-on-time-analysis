@@ -1,5 +1,8 @@
 jupyterlab
 dash
+dash_html_components
+dash_bootstrap_components
+dash_core_components
 plotly
 plotly_express
 pandas
@@ -7,7 +10,6 @@ shapely
 requests
 lxml
 geopandas
-matplotlib
 psycopg2
 ipython-sql
 gunicorn

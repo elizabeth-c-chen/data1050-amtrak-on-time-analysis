@@ -1,6 +1,7 @@
 .DS_Store
 logfile
 amtrak-project.code-workspace
+Untitled.ipynb
 __pycache__/
 .ipynb_checkpoints/
 .vscode/
