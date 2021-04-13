@@ -1,5 +1,6 @@
 import os
 from textwrap import dedent
+import time 
 
 import pandas as pd
 import psycopg2
@@ -20,7 +21,7 @@ assert os.environ.get('DATABASE_URL') is not None, 'database URL is not set!'
 
 # Helper Functions
 def connect_and_query(query):
-    conn = psycopg2.connect(os.environ['DATABASE_URL'], sslmode='require')
+    conn = psycopg2.connect(os.environ.get('DATABASE_URL'), sslmode='require')
     query_data = pd.read_sql(query, conn)
     conn.close()
     return query_data
@@ -158,7 +159,7 @@ default_query = dedent(
                 departures d
                 INNER JOIN (
                 SELECT
-                    conditions,
+                    precip_type,
                     date_time,
                     location,
                     si.station_code AS station_code
@@ -172,17 +173,13 @@ default_query = dedent(
                             station_info
                     ) si ON wh.location = si.weather_loc
                 WHERE
-                    wh.conditions IN ('Rain', 'Snow', 'No Precipitation')
+                    wh.precip_type IN ('Rain', 'Snow', 'No Precipitation')
                 ) wh ON wh.station_code = d.station_code AND
                 DATE_TRUNC('hour', d.full_sched_dep_datetime) = wh.date_time
             WHERE
                 d.direction = 'Southbound' AND
                 d.origin_week_day IN
                     ('Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday')
-                AND
-                d.depart_diff BETWEEN 0 AND 100 AND
-                d.service_disruption = '0' AND
-                d.cancellations = '0'
             GROUP BY d.station_code, d.direction;
             """
 )
@@ -203,7 +200,7 @@ route = px.line_mapbox(geo_route,
                        color_discrete_map=colors,
                        hover_data={color_group_key: False, 'Group': False},
                        mapbox_style=map_style,
-                       zoom=6)
+                       zoom=5.75)
 route.update_traces(line=dict(width=3))
 
 route.add_trace(go.Scattermapbox(lat=geo_info['LAT'].round(decimals=5),
@@ -227,22 +224,25 @@ config = dict({'scrollZoom': False})
 
 # Components of homepage layout
 
+div_alert = html.Div(id="alert-msg")
+
 controls = dbc.Card(
     [
         dbc.FormGroup(
             [
-                dbc.Label('Choose a direction for travel'),
+                dbc.Label('Choose a direction for travel', style={'font-size': 15}),
                 dcc.RadioItems(
                     id='direction-selector',
                     options=[{'label': 'Northbound', 'value': "\'Northbound\'"},
                              {'label': 'Southbound', 'value': "\'Southbound\'"}],
-                    value="\'Southbound\'"
+                    value="\'Southbound\'",
+                    style={'font-size': 14, 'padding-left': '4%'}
                 ),
             ]
         ),
         dbc.FormGroup(
             [
-                dbc.Label('Select one or more days of the week to include'),
+                dbc.Label('Select one or more days of the week to include', style={'font-size': 15}),
                 dcc.Checklist(
                     id='days-of-week-checkboxes',
                     options=[
@@ -255,12 +255,13 @@ controls = dbc.Card(
                             {'label': 'Saturday', 'value': 6}
                     ],
                     value=[0, 1, 2, 3, 4, 5, 6],
+                    style={'font-size': 14, 'padding-left': '4%'}
                 )
             ]
         ),
         dbc.FormGroup(
             [
-                dbc.Label('Select precipitation conditions to include'),
+                dbc.Label('Select precipitation conditions to include', style={'font-size': 15}),
                 dcc.Checklist(
                     id='weather-conditions-selector',
                     options=[
@@ -268,45 +269,46 @@ controls = dbc.Card(
                             {'label': 'Snow', 'value': 1},
                             {'label': 'No Precipitation', 'value': 2}
                     ],
-                    value=[0, 1, 2]
+                    value=[0, 1, 2],
+                    style={'font-size': 14, 'padding-left': '4%'}
                 )
             ]
         ),
-        dbc.FormGroup(
-            [
-                dbc.Label('Enter a range of allowed delays in minutes (max = 600)'),
-                dcc.Input(id='min-delay', type='number', value=0, min=0, max=599),
-                dcc.Input(id='max-delay', type='number', value=100, min=1, max=600)
-            ]
-        ),
-        dbc.FormGroup(
-            [
-                dbc.Label('Allow data with known Service Disruptions in query?'),
-                dcc.RadioItems(
-                    id='allow-sd-choice',
-                    options=[
-                        {'label': 'Yes', 'value': "\'1\'"},
-                        {'label': 'No', 'value': "\'0\'"}],
-                    value="\'0\'")
-            ]
-        ),
-        dbc.FormGroup(
-            [
-                dbc.Label('Allow data with known Cancellations in query?'),
-                dcc.RadioItems(
-                    id='allow-cancel-choice',
-                    options=[
-                        {'label': 'Yes', 'value': "\'1\'"},
-                        {'label': 'No', 'value': "\'0\'"}
-                    ],
-                    value="\'0\'")
-            ]
-        ),
+#        dbc.FormGroup(
+#            [
+#                dbc.Label('Enter a range of allowed delays in minutes (max = 600)'),
+#                dcc.Input(id='min-delay', type='number', value=0, min=0, max=599),
+#                dcc.Input(id='max-delay', type='number', value=100, min=1, max=600)
+#            ]
+#        ),
+#        dbc.FormGroup(
+#            [
+#                dbc.Label('Allow data with known Service Disruptions in query?'),
+#                dcc.RadioItems(
+#                    id='allow-sd-choice',
+#                    options=[
+#                        {'label': 'Yes', 'value': "\'1\'"},
+#                        {'label': 'No', 'value': "\'0\'"}],
+#                    value="\'0\'")
+#            ]
+#        ),
+#        dbc.FormGroup(
+#            [
+#                dbc.Label('Allow data with known Cancellations in query?'),
+#                dcc.RadioItems(
+#                    id='allow-cancel-choice',
+#                    options=[
+#                        {'label': 'Yes', 'value': "\'1\'"},
+#                        {'label': 'No', 'value': "\'0\'"}
+#                    ],
+#                    value="\'0\'")
+#            ]
+#        ),
         dbc.Button(
             "Submit Query and Plot Results",
             color="primary",
             id='send-query-button',
-            style={'font-size': '14px'}
+            style={'font-size': 15}
         )
     ],
     body=True
@@ -328,10 +330,20 @@ app.layout = dbc.Container(
         html.Hr(),
         dbc.Row(
             [
-                dbc.Col(controls, md=4, lg=3.25),
+                dbc.Col([controls, div_alert], md=4, lg=3.25),
                 dbc.Col(viz, md=8, lg=8.75)
             ],
             no_gutters=False
+        ),
+        dbc.Row(
+            [
+                html.P(
+                    children="You are visiting the portfolio of Elizabeth C. Chen, Master's \
+                        student at Brown University. This webpage is not affiliated with \
+                        Amtrak in any way.",
+                    style={'font-size': 12, 'display': 'block', 'padding-top': '3%', 'margin-left': 'auto', 'margin-right': 'auto'}
+                )
+            ]
         )
     ],
     fluid=True,
@@ -339,19 +351,24 @@ app.layout = dbc.Container(
 
 
 @app.callback(
-    Output("geo-route", "figure"),
-    [Input("send-query-button", 'n_clicks')],
+    [
+        Output("alert-msg", "children"),
+        Output("geo-route", "figure") 
+    ],
+    [
+        Input("send-query-button", 'n_clicks')
+    ],
     [
         State('direction-selector', 'value'),
         State('days-of-week-checkboxes', 'value'),
         State('weather-conditions-selector', 'value'),
-        State('min-delay', 'value'),
-        State('max-delay', 'value'),
-        State('allow-sd-choice', 'value'),
-        State('allow-cancel-choice', 'value')
+#        State('min-delay', 'value'),
+#        State('max-delay', 'value'),
+#        State('allow-sd-choice', 'value'),
+#        State('allow-cancel-choice', 'value')
     ]
 )
-def generate_query(n_clicks, direction, days, weather, min_d, max_d, sd, cancel):
+def generate_query(n_clicks, direction, days, weather):
     if n_clicks is None:
         raise dash.exceptions.PreventUpdate
     else:
@@ -368,7 +385,7 @@ def generate_query(n_clicks, direction, days, weather, min_d, max_d, sd, cancel)
                 departures d
                 INNER JOIN (
                 SELECT
-                    conditions,
+                    precip_type,
                     date_time,
                     location,
                     si.station_code AS station_code
@@ -382,21 +399,19 @@ def generate_query(n_clicks, direction, days, weather, min_d, max_d, sd, cancel)
                             station_info
                     ) si ON wh.location = si.weather_loc
                 WHERE
-                    wh.conditions IN {selected_precip}
+                    wh.precip_type IN {selected_precip}
                 ) wh ON wh.station_code = d.station_code AND
                 DATE_TRUNC('hour', d.full_sched_dep_datetime) = wh.date_time
             WHERE
-                d.direction = 'Southbound' AND
-                d.origin_week_day IN {selected_days} AND
-                d.depart_diff BETWEEN {min_d} AND {max_d} AND
-                d.service_disruption = {sd} AND
-                d.cancellations = {cancel}
+                d.direction = {direction} AND
+                d.origin_week_day IN {selected_days}
             GROUP BY d.station_code, d.direction;
             """
         )
         try:
+            t0 = time.time()
             query_df = connect_and_query(query)
-            assert query_df.shape[0] > 5
+            assert query_df.shape[0] > 10
         except AssertionError:
             raise dash.exceptions.PreventUpdate
         colors, delays, color_group_key = get_colors(query_df)
@@ -409,7 +424,7 @@ def generate_query(n_clicks, direction, days, weather, min_d, max_d, sd, cancel)
             color_discrete_map=colors,
             hover_data={color_group_key: False, 'Group': False},
             mapbox_style=map_style,
-            zoom=6)
+            zoom=5.75)
         route.update_traces(line=dict(width=3))
         route.add_trace(go.Scattermapbox(
             lat=geo_info.LAT.round(decimals=5),
@@ -430,7 +445,12 @@ def generate_query(n_clicks, direction, days, weather, min_d, max_d, sd, cancel)
                 plot_bgcolor="white",
                 margin=dict(t=35, l=80, b=0, r=0)))
         route.update_yaxes(automargin=True)
-    return route
+        t1 = time.time()
+        exec_time = t1 - t0
+        query_size = query_df["Num Records"].sum()
+        alert_msg = f"Queried {query_size} records. Total time: {exec_time:.2f}s."
+        alert = dbc.Alert(alert_msg, color="success", dismissable=True)
+    return alert, route
 
 
 if __name__ == '__main__':
