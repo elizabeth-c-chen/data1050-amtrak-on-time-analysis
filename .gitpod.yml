@@ -1,0 +1,9 @@
+ports:
+  - port: 8000
+    onOpen: open-browser
+
+tasks:
+  - init: pip install -r requirements.txt
+  - command: cp -r .jupyter /home/gitpod
+  - command: gunicorn app:server
+
