@@ -2,9 +2,6 @@ import os
 from textwrap import dedent
 
 import pandas as pd
-import numpy as np
-from sklearn.preprocessing import MinMaxScaler
-
 import psycopg2
 
 import dash
@@ -20,8 +17,8 @@ import plotly
 
 # Helper Functions
 def connect_and_query(query):
-    conn = psycopg2.connect("dbname='amtrakproject' user='appuser' \
-    password={}".format(os.environ.get('DB_PASS')))
+    db_string = "dbname='amtrakproject' user='appuser' password="
+    conn = psycopg2.connect(db_string + os.environ.get('DB_PASS'))
     query_data = pd.read_sql(query, conn)
     conn.close()
     return query_data
@@ -92,19 +89,17 @@ def get_colors(query_df):
     Create the path color groups according to data from query.
     """
     direction = query_df['Direction'].iloc[0]
-    colorscale = plotly.colors.PLOTLY_SCALES['Blackbody']
+    colors, scale = plotly.colors.convert_colors_to_same_type(plotly.colors.sequential.Turbo)
+    colorscale = plotly.colors.make_colorscale(colors, scale=scale)
     if direction == 'Northbound':
         color_group_key = 'NB Station Group'
     elif direction == 'Southbound':
         color_group_key = 'SB Station Group'
     station_column = geo_route[color_group_key]
-    mm = MinMaxScaler()
     colors = {station: 'rgb(0,0,0)' for station in station_column.unique()}
-    array_delay = np.array(query_df['Average Delay']).reshape(-1, 1)
-    scaled_delay = mm.fit_transform(array_delay)
-    scaled_delay = pd.DataFrame(scaled_delay, index=query_df.index)
+    scaled_delay = query_df['Average Delay'] / query_df['Average Delay'].max()
     for station in query_df['Station']:
-        delay_val = scaled_delay.loc[query_df['Station'] == station].values[0][0]
+        delay_val = scaled_delay.loc[query_df['Station'] == station].values[0]
         delay_color = get_continuous_color(colorscale, delay_val)
         colors[station] = delay_color
     return colors, query_df['Average Delay'], color_group_key
@@ -153,6 +148,48 @@ geo_route_query = dedent(
 )
 geo_route = connect_and_query(geo_route_query)
 
+default_query = dedent(
+            """
+            SELECT
+                d.direction AS "Direction",
+                d.station_code AS "Station",
+                ROUND(AVG(d.depart_diff), 2) AS "Average Delay",
+                COUNT(*) AS "Num Records"
+            FROM
+                departures d
+                INNER JOIN (
+                SELECT
+                    conditions,
+                    date_time,
+                    location,
+                    si.station_code AS station_code
+                FROM
+                    weather_hourly wh
+                    INNER JOIN (
+                        SELECT
+                            station_code,
+                            weather_loc
+                        FROM
+                            station_info
+                    ) si ON wh.location = si.weather_loc
+                WHERE
+                    wh.conditions IN ('Rain', 'Snow', 'No Precipitation')
+                ) wh ON wh.station_code = d.station_code AND
+                DATE_TRUNC('hour', d.full_sched_dep_datetime) = wh.date_time
+            WHERE
+                d.direction = 'Southbound' AND
+                d.origin_week_day IN
+                    ('Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday')
+                AND
+                d.depart_diff BETWEEN 0 AND 100 AND
+                d.service_disruption = '0' AND
+                d.cancellations = '0'
+            GROUP BY d.station_code, d.direction;
+            """
+)
+default_query_df = connect_and_query(default_query)
+colors, delays, color_group_key = get_colors(default_query_df)
+
 # Info for map -- change later
 amtrak_stations = list(geo_info['STNCODE'])
 location_names = list(geo_info['STNNAME'])
@@ -162,10 +199,10 @@ map_style = 'outdoors'
 route = px.line_mapbox(geo_route,
                        lat=geo_route['Latitude'],
                        lon=geo_route['Longitude'],
-                       line_group=geo_route['Group'],
-                       color=geo_route['Connecting Path'],
-                       color_discrete_sequence=px.colors.qualitative.T10,
-                       hover_data={'Group': False},
+                       line_group=geo_route['Connecting Path'],
+                       color=geo_route[color_group_key],
+                       color_discrete_map=colors,
+                       hover_data={color_group_key: False, 'Group': False},
                        mapbox_style=map_style,
                        zoom=6)
 route.update_traces(line=dict(width=3))
@@ -174,9 +211,9 @@ route.add_trace(go.Scattermapbox(lat=geo_info['LAT'].round(decimals=5),
                                  lon=geo_info['LON'].round(decimals=5),
                                  name='Amtrak Stations',
                                  hoverinfo='text',
-                                 customdata=geo_info['STNCODE'],
+                                 customdata=delays,
                                  hovertext=geo_info['STNNAME'],
-                                 hovertemplate="%{hovertext} (%{customdata})<extra></extra>",
+                                 hovertemplate="%{hovertext} (Avg. Delay: %{customdata} mins)<extra></extra>",
                                  mode='markers',
                                  marker={'size': 6, 'color': 'Navy'},
                                  fill='none'
@@ -184,22 +221,12 @@ route.add_trace(go.Scattermapbox(lat=geo_info['LAT'].round(decimals=5),
                 )
 route.update_layout(
     dict(paper_bgcolor="white", plot_bgcolor="white",
-         margin=dict(t=35, l=80, b=0, r=0), height=500))
+         margin=dict(t=35, l=80, b=0, r=0)))
 route.update_yaxes(automargin=True)
 
 config = dict({'scrollZoom': False})
 
 # Components of homepage layout
-
-div_alert = dbc.Spinner(html.Div(id="alert-msg"))
-
-query_container = dbc.Card(
-        [
-            html.H5("Auto-generated PostgreSQL Query", className='card-title'),
-            dcc.Markdown(id='auto-sql-query')
-        ],
-        body=True
-)
 
 controls = dbc.Card(
     [
@@ -223,7 +250,7 @@ controls = dbc.Card(
                             {'label': 'Sunday', 'value': 0},
                             {'label': 'Monday', 'value': 1},
                             {'label': 'Tuesday', 'value': 2},
-                            {'label': 'Wednesday', 'value': 2},
+                            {'label': 'Wednesday', 'value': 3},
                             {'label': 'Thursday', 'value': 4},
                             {'label': 'Friday', 'value': 5},
                             {'label': 'Saturday', 'value': 6}
@@ -242,15 +269,15 @@ controls = dbc.Card(
                             {'label': 'Snow', 'value': 1},
                             {'label': 'No Precipitation', 'value': 2}
                     ],
-                    value=[2]
+                    value=[0, 1, 2]
                 )
             ]
         ),
         dbc.FormGroup(
             [
                 dbc.Label('Enter a range of allowed delays in minutes (max = 600)'),
-                dcc.Input(id='min-delay', placeholder='0', type='number', value=0, min=0, max=599),
-                dcc.Input(id='max-delay', placeholder='60', type='number', value=60, min=0, max=600)
+                dcc.Input(id='min-delay', type='number', value=0, min=0, max=599),
+                dcc.Input(id='max-delay', type='number', value=100, min=1, max=600)
             ]
         ),
         dbc.FormGroup(
@@ -276,27 +303,36 @@ controls = dbc.Card(
                     value="\'0\'")
             ]
         ),
-        dbc.Button("Submit Query and Plot Results", color="primary", id='send-query-button')
+        dbc.Button(
+            "Submit Query and Plot Results",
+            color="primary",
+            id='send-query-button',
+            style={'font-size': '14px'}
+        )
     ],
-    body=True,
+    body=True
 )
 
+viz = dbc.Card(
+    [
+        dcc.Graph(
+            id='geo-route',
+            config=config,
+            figure=route)
+    ],
+    body=True
+)
 app.layout = dbc.Container(
     [
-        html.H1("DATA 1050 Final Project"),
+        html.H2("Amtrak Northeast Regional On-Time Performance Explorer"),
+        html.H5("A DATA 1050 Final Project by Elizabeth C. Chen"),
         html.Hr(),
         dbc.Row(
             [
-                dbc.Col(controls, lg=5),
-                dbc.Col(
-                    dcc.Graph(
-                        id='geo-route',
-                        config=config,
-                        figure=route,
-                        style={"height": "800px"}),
-                    lg=7),
+                dbc.Col(controls, md=4, lg=3.25),
+                dbc.Col(viz, md=8, lg=8.75)
             ],
-            no_gutters=True
+            no_gutters=False
         )
     ],
     fluid=True,
@@ -305,9 +341,7 @@ app.layout = dbc.Container(
 
 @app.callback(
     Output("geo-route", "figure"),
-    [
-        Input("send-query-button", 'n_clicks')
-    ],
+    [Input("send-query-button", 'n_clicks')],
     [
         State('direction-selector', 'value'),
         State('days-of-week-checkboxes', 'value'),
@@ -319,80 +353,85 @@ app.layout = dbc.Container(
     ]
 )
 def generate_query(n_clicks, direction, days, weather, min_d, max_d, sd, cancel):
-    selected_days = get_days(days)
-    selected_precip = get_precip(weather)
-    query = dedent(
-        f"""
-        SELECT
-            d.direction AS "Direction",
-            d.station_code AS "Station",
-            ROUND(AVG(d.depart_diff), 2) AS "Average Delay",
-            COUNT(*) AS "Num Records"
-        FROM
-            departures d
-            INNER JOIN (
+    if n_clicks is None:
+        raise dash.exceptions.PreventUpdate
+    else:
+        selected_days = get_days(days)
+        selected_precip = get_precip(weather)
+        query = dedent(
+            f"""
             SELECT
-                conditions,
-                date_time,
-                location,
-                si.station_code AS station_code
+                d.direction AS "Direction",
+                d.station_code AS "Station",
+                ROUND(AVG(d.depart_diff), 2) AS "Average Delay",
+                COUNT(*) AS "Num Records"
             FROM
-                weather_hourly wh
+                departures d
                 INNER JOIN (
-                    SELECT
-                        station_code,
-                        weather_loc
-                    FROM
-                        station_info
-                ) si ON wh.location = si.weather_loc
+                SELECT
+                    conditions,
+                    date_time,
+                    location,
+                    si.station_code AS station_code
+                FROM
+                    weather_hourly wh
+                    INNER JOIN (
+                        SELECT
+                            station_code,
+                            weather_loc
+                        FROM
+                            station_info
+                    ) si ON wh.location = si.weather_loc
+                WHERE
+                    wh.conditions IN {selected_precip}
+                ) wh ON wh.station_code = d.station_code AND
+                DATE_TRUNC('hour', d.full_sched_dep_datetime) = wh.date_time
             WHERE
-                wh.conditions IN {selected_precip}
-            ) wh ON wh.station_code = d.station_code AND
-            DATE_TRUNC('hour', d.full_sched_dep_datetime) = wh.date_time
-        WHERE
-            d.direction = {direction} AND
-            d.origin_week_day IN {selected_days} AND
-            d.depart_diff BETWEEN {min_d} AND {max_d} AND
-            d.service_disruption = {sd} AND
-            d.cancellations = {cancel}
-        GROUP BY d.station_code, d.direction;
-        """
-    )
-    # Get results from query submission to database
-    query_df = connect_and_query(query)
-    # This is broken and needs to be fixed !!!
-    colors, delays, color_group_key = get_colors(query_df)
-    route = px.line_mapbox(
-        geo_route,
-        lat=geo_route['Latitude'],
-        lon=geo_route['Longitude'],
-        line_group=geo_route['Connecting Path'],
-        color=geo_route[color_group_key],
-        color_discrete_map=colors,
-        hover_data={'Group': False},
-        mapbox_style=map_style,
-        zoom=6)
-    route.update_traces(line=dict(width=3))
-    route.add_trace(go.Scattermapbox(
-        lat=geo_info.LAT.round(decimals=5),
-        lon=geo_info.LON.round(decimals=5),
-        name='Amtrak Stations',
-        hoverinfo='text',
-        customdata=delays,
-        hovertext=geo_info.STNNAME,
-        hovertemplate="%{hovertext} (Avg. Delay: %{customdata} mins)<extra></extra>",
-        mode='markers',
-        marker={'size': 6, 'color': 'Navy'},
-        fill='none'
+                d.direction = 'Southbound' AND
+                d.origin_week_day IN {selected_days} AND
+                d.depart_diff BETWEEN {min_d} AND {max_d} AND
+                d.service_disruption = {sd} AND
+                d.cancellations = {cancel}
+            GROUP BY d.station_code, d.direction;
+            """
         )
-    )
-    route.update_layout(
-        dict(
-            paper_bgcolor="white",
-            plot_bgcolor="white",
-            margin=dict(t=35, l=80, b=0, r=0), height=500))
-    route.update_yaxes(automargin=True)
-#    return route
+        try:
+            query_df = connect_and_query(query)
+            assert query_df.shape[0] > 5
+        except AssertionError:
+            raise dash.exceptions.PreventUpdate
+        colors, delays, color_group_key = get_colors(query_df)
+        route = px.line_mapbox(
+            geo_route,
+            lat=geo_route['Latitude'],
+            lon=geo_route['Longitude'],
+            line_group=geo_route['Connecting Path'],
+            color=geo_route[color_group_key],
+            color_discrete_map=colors,
+            hover_data={color_group_key: False, 'Group': False},
+            mapbox_style=map_style,
+            zoom=6)
+        route.update_traces(line=dict(width=3))
+        route.add_trace(go.Scattermapbox(
+            lat=geo_info.LAT.round(decimals=5),
+            lon=geo_info.LON.round(decimals=5),
+            name='Amtrak Stations',
+            hoverinfo='text',
+            customdata=delays,
+            hovertext=geo_info['STNNAME'],
+            hovertemplate="%{hovertext} (Avg. Delay: %{customdata} mins)<extra></extra>",
+            mode='markers',
+            marker={'size': 6, 'color': 'Navy'},
+            fill='none'
+            )
+        )
+        route.update_layout(
+            dict(
+                paper_bgcolor="white",
+                plot_bgcolor="white",
+                margin=dict(t=35, l=80, b=0, r=0)))
+        route.update_yaxes(automargin=True)
+    return route
 
 
 if __name__ == '__main__':
