@@ -1,12 +1,10 @@
 .DS_Store
+logfile
+amtrak-project.code-workspace
 __pycache__/
 .ipynb_checkpoints/
 .vscode/
 local_files/
 project_db/
 data/
-logfile
-proj-ds-app-handout.pdf
-remake_db.sh
 assets/
-project_db.dump
