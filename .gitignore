@@ -9,3 +9,6 @@ local_files/
 project_db/
 data/
 assets/
+new_db/
+tabs-app.py
+

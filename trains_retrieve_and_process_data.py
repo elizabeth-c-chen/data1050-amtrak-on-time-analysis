@@ -287,8 +287,6 @@ if __name__ == '__main__':
         depart.to_csv(depart_filestring, line_terminator='\n', index=False)
         full_arrive = process_columns(arrive, 'Arrive')
         full_depart = process_columns(depart, 'Depart')
-        print(full_arrive.tail())
-        print(full_depart.tail())
         arrive_filestring2021 = './data/trains/processed_arrive_2021.csv'
         depart_filestring2021 = './data/trains/processed_depart_2021.csv'
         prev_arrive2021 = pd.read_csv(arrive_filestring2021)
@@ -297,3 +295,4 @@ if __name__ == '__main__':
         new_depart2021 = pd.concat([prev_depart2021, full_depart], ignore_index=True, axis=0)
         new_arrive2021.to_csv(arrive_filestring2021, line_terminator='\n', index=False)
         new_depart2021.to_csv(depart_filestring2021, line_terminator='\n', index=False)
+        print('Successfully retrieved and processed data for DATE: {}'.format(start))

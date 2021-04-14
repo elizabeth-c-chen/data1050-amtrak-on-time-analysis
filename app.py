@@ -2,9 +2,6 @@ import os
 from textwrap import dedent
 import time 
 
-import pandas as pd
-import psycopg2
-
 import dash
 import dash_core_components as dcc
 import dash_bootstrap_components as dbc
@@ -13,100 +10,8 @@ from dash.dependencies import Input, Output, State
 
 import plotly.express as px
 import plotly.graph_objects as go
-import plotly
 
-# Database setup
-assert os.environ.get('DATABASE_URL') is not None, 'database URL is not set!'
-
-
-# Helper Functions
-def connect_and_query(query):
-    conn = psycopg2.connect(os.environ.get('DATABASE_URL'), sslmode='require')
-    query_data = pd.read_sql(query, conn)
-    conn.close()
-    return query_data
-
-
-def get_days(days_selected):
-    output = '('
-    day_names = ['Sunday', 'Monday', 'Tuesday', 'Wednesday',
-                 'Thursday', 'Friday', 'Saturday']
-    for i in range(len(day_names)):
-        if i in days_selected:
-            output += '\'' + day_names[i] + '\'' + ', '
-    output = output[0:-2] + ')'
-    return output
-
-
-def get_precip(precip_selected):
-    output = '('
-    precip_types = ['Rain', 'Snow', 'No Precipitation']
-    for i in range(len(precip_types)):
-        if i in precip_selected:
-            output += '\'' + precip_types[i] + '\'' + ', '
-    output = output[0:-2] + ')'
-    return output
-
-
-def get_continuous_color(colorscale, intermed):
-    """
-    Plotly continuous colorscales assign colors to the range [0, 1]. This function computes
-    the intermediate color for any value in that range.
-
-    Plotly doesn't make the colorscales directly accessible in a common format.
-    Some are ready to use:
-        colorscale = plotly.colors.PLOTLY_SCALES["Greens"]
-
-    Others are just swatches that need to be constructed into a colorscale:
-     colors, scale = plotly.colors.convert_colors_to_same_type(plotly.colors.sequential.Viridis)
-     colorscale = plotly.colors.make_colorscale(colors, scale=scale)
-
-    :param colorscale: A plotly continuous colorscale defined with RGB string colors.
-    :param intermed: value in the range [0, 1]
-    :return: color in rgb string format
-    :rtype: str
-    """
-    if len(colorscale) < 1:
-        raise ValueError("colorscale must have at least one color")
-
-    if intermed <= 0 or len(colorscale) == 1:
-        return colorscale[0][1]
-    if intermed >= 1:
-        return colorscale[-1][1]
-
-    for cutoff, color in colorscale:
-        if intermed > cutoff:
-            low_cutoff, low_color = cutoff, color
-        else:
-            high_cutoff, high_color = cutoff, color
-            break
-
-    return plotly.colors.find_intermediate_color(
-        lowcolor=low_color, highcolor=high_color,
-        intermed=((intermed - low_cutoff) / (high_cutoff - low_cutoff)),
-        colortype="rgb")
-
-
-def get_colors(query_df):
-    """
-    Create the path color groups according to data from query.
-    """
-    direction = query_df['Direction'].iloc[0]
-    colors, scale = plotly.colors.convert_colors_to_same_type(plotly.colors.sequential.Turbo)
-    colorscale = plotly.colors.make_colorscale(colors, scale=scale)
-    if direction == 'Northbound':
-        color_group_key = 'NB Station Group'
-    elif direction == 'Southbound':
-        color_group_key = 'SB Station Group'
-    station_column = geo_route[color_group_key]
-    colors = {station: 'rgb(0,0,0)' for station in station_column.unique()}
-    scaled_delay = query_df['Average Delay'] / query_df['Average Delay'].max()
-    for station in query_df['Station']:
-        delay_val = scaled_delay.loc[query_df['Station'] == station].values[0]
-        delay_color = get_continuous_color(colorscale, delay_val)
-        colors[station] = delay_color
-    return colors, query_df['Average Delay'], color_group_key
-
+from utils import connect_and_query, get_days, get_precip, get_colors
 
 # Dash setup
 app = dash.Dash(__name__,
@@ -128,7 +33,7 @@ geo_info_query = dedent(
         longitude as "LON",
         latitude as "LAT"
     FROM
-        station_info
+        station_info;
     """
 )
 geo_info = connect_and_query(geo_info_query)
@@ -184,7 +89,7 @@ default_query = dedent(
             """
 )
 default_query_df = connect_and_query(default_query)
-colors, delays, color_group_key = get_colors(default_query_df)
+colors, delays, color_group_key = get_colors(geo_route, default_query_df)
 
 # Info for map -- change later
 amtrak_stations = list(geo_info['STNCODE'])
@@ -346,14 +251,14 @@ app.layout = dbc.Container(
             ]
         )
     ],
-    fluid=True,
+    fluid=True
 )
 
 
 @app.callback(
     [
         Output("alert-msg", "children"),
-        Output("geo-route", "figure") 
+        Output("geo-route", "figure")
     ],
     [
         Input("send-query-button", 'n_clicks')
@@ -401,7 +306,7 @@ def generate_query(n_clicks, direction, days, weather):
                 WHERE
                     wh.precip_type IN {selected_precip}
                 ) wh ON wh.station_code = d.station_code AND
-                DATE_TRUNC('hour', d.full_sched_dep_datetime) = wh.date_time
+                  DATE_TRUNC('hour', d.full_sched_dep_datetime) = wh.date_time
             WHERE
                 d.direction = {direction} AND
                 d.origin_week_day IN {selected_days}
@@ -414,7 +319,8 @@ def generate_query(n_clicks, direction, days, weather):
             assert query_df.shape[0] > 10
         except AssertionError:
             raise dash.exceptions.PreventUpdate
-        colors, delays, color_group_key = get_colors(query_df)
+
+        colors, delays, color_group_key = get_colors(geo_route, query_df)
         route = px.line_mapbox(
             geo_route,
             lat=geo_route['Latitude'],
