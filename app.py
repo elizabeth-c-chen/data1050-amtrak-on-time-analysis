@@ -80,7 +80,7 @@ default_query = dedent(
                 WHERE
                     wh.precip_type IN ('Rain', 'Snow', 'No Precipitation')
                 ) wh ON wh.station_code = d.station_code AND
-                DATE_TRUNC('hour', d.full_sched_dep_datetime) = wh.date_time
+                DATE_TRUNC('hour', d.full_act_dep_datetime) = wh.date_time
             WHERE
                 d.direction = 'Southbound' AND
                 d.origin_week_day IN
@@ -306,7 +306,7 @@ def generate_query(n_clicks, direction, days, weather):
                 WHERE
                     wh.precip_type IN {selected_precip}
                 ) wh ON wh.station_code = d.station_code AND
-                  DATE_TRUNC('hour', d.full_sched_dep_datetime) = wh.date_time
+                  DATE_TRUNC('hour', d.full_act_dep_datetime) = wh.date_time
             WHERE
                 d.direction = {direction} AND
                 d.origin_week_day IN {selected_days}

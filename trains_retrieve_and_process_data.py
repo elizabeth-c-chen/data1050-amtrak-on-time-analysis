@@ -219,11 +219,11 @@ def get_key_names(arrive_or_depart):
     """
     if arrive_or_depart == 'Arrive':
         return {'Sch Full Date': 'Full Sch Ar Date', 'Sch Abbr': 'Sch Ar',
-                'Act Abbr': 'Act Ar', 'Diff': 'Arrive Diff'}
+                'Act Full Date': 'Full Act Ar Date', 'Act Abbr': 'Act Ar', 'Diff': 'Arrive Diff'}
 
     elif arrive_or_depart == 'Depart':
         return {'Sch Full Date': 'Full Sch Dp Date', 'Sch Abbr': 'Sch Dp',
-                'Act Abbr': 'Act Dp', 'Diff': 'Depart Diff'}
+                'Act Full Date': 'Full Act Dp Date', 'Act Abbr': 'Act Dp', 'Diff': 'Depart Diff'}
 
 
 def process_columns(df, arrive_or_depart):
@@ -231,10 +231,12 @@ def process_columns(df, arrive_or_depart):
     This function takes an input of the initial data (a pandas data frame) and whether it is
     arrival or departure data. It takes each column of the initial data and does various
     operations to create the fully processed data frame.
+    Inputs:
+            df - pandas dataframe of raw data
+            arrive_or_depart - string 'Arrive' or 'Depart' to indicate which dict keys to use
     """
     # The specific keys depending on if new_df is for arr or dep data
     ad_keys = get_key_names(arrive_or_depart)
-
     new_df = pd.DataFrame()
     new_df['Train Num'] = pd.to_numeric(df['Train #'])
     new_df['Station'] = df['Station']
@@ -267,10 +269,13 @@ def process_columns(df, arrive_or_depart):
     m_early = (-1*delta < max_expected_delay) & (-1*max_expected_delay > -1*delta)
     df.loc[m_late, 'Act Date'] += pd.Timedelta(days=1)
     df.loc[m_early, 'Act Date'] -= pd.Timedelta(days=1)
+    new_df[ad_keys['Act Full Date']] = df['Act Date']
     diff = (df['Act Date'] - df['Sched Date']).dt.total_seconds()/60
     new_df[ad_keys['Diff']] = np.rint(diff).astype(int)
-    new_df['Service Disruption'] = df['Service Disruption'].replace('SD', 1).replace('', 0)
-    new_df['Cancellations'] = df['Cancellations'].replace('C', 1).replace('', 0)
+    df['Service Disruption'] = df['Service Disruption'].replace('SD', 1).replace('', 0)
+    df['Cancellations'] = df['Cancellations'].replace('C', 1).replace('', 0)
+    new_df['Service Disruption'] = df['Service Disruption'].astype(int)
+    new_df['Cancellations'] = df['Cancellations'].astype(int)
     return new_df.replace('', np.nan).dropna()
 
 
@@ -296,3 +301,5 @@ if __name__ == '__main__':
         new_arrive2021.to_csv(arrive_filestring2021, line_terminator='\n', index=False)
         new_depart2021.to_csv(depart_filestring2021, line_terminator='\n', index=False)
         print('Successfully retrieved and processed data for DATE: {}'.format(start))
+    else:
+        print('Failed to retrieve data.')
