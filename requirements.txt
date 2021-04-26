@@ -6,10 +6,9 @@ dash_core_components
 plotly
 plotly_express
 pandas
-shapely
-requests
-lxml
 geopandas
+lxml
+requests
 psycopg2
 ipython-sql
 gunicorn

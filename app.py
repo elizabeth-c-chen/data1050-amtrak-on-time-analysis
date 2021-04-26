@@ -56,12 +56,12 @@ geo_route = connect_and_query(geo_route_query)
 default_query = dedent(
             """
             SELECT
-                d.direction AS "Direction",
-                d.station_code AS "Station",
-                ROUND(AVG(d.depart_diff), 2) AS "Average Delay",
+                t.direction AS "Direction",
+                t.station_code AS "Station",
+                ROUND(AVG(t.timedelta_from_sched), 2) AS "Average Delay",
                 COUNT(*) AS "Num Records"
             FROM
-                departures d
+                all_trains t
                 INNER JOIN (
                 SELECT
                     precip_type,
@@ -79,13 +79,13 @@ default_query = dedent(
                     ) si ON wh.location = si.weather_loc
                 WHERE
                     wh.precip_type IN ('Rain', 'Snow', 'No Precipitation')
-                ) wh ON wh.station_code = d.station_code AND
-                DATE_TRUNC('hour', d.full_act_dep_datetime) = wh.date_time
+                ) wh ON wh.station_code = t.station_code AND
+                DATE_TRUNC('hour', t.full_act_arr_dep_datetime) = wh.date_time
             WHERE
-                d.direction = 'Southbound' AND
-                d.origin_week_day IN
+                t.direction = 'Southbound' AND
+                t.origin_week_day IN
                     ('Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday')
-            GROUP BY d.station_code, d.direction;
+            GROUP BY t.station_code, t.direction;
             """
 )
 default_query_df = connect_and_query(default_query)
@@ -141,7 +141,8 @@ controls = dbc.Card(
                     options=[{'label': 'Northbound', 'value': "\'Northbound\'"},
                              {'label': 'Southbound', 'value': "\'Southbound\'"}],
                     value="\'Southbound\'",
-                    style={'font-size': 14, 'padding-left': '4%'}
+                    inputStyle={"margin-right": "10px"},
+                    style={'font-size': 14, 'padding-left': '5%'}
                 ),
             ]
         ),
@@ -160,13 +161,14 @@ controls = dbc.Card(
                             {'label': 'Saturday', 'value': 6}
                     ],
                     value=[0, 1, 2, 3, 4, 5, 6],
-                    style={'font-size': 14, 'padding-left': '4%'}
+                    inputStyle={"margin-right": "10px"},
+                    style={'font-size': 14, 'padding-left': '5%'}
                 )
             ]
         ),
         dbc.FormGroup(
             [
-                dbc.Label('Select precipitation conditions to include', style={'font-size': 15}),
+                dbc.Label('Select one or more precipitation conditions to include', style={'font-size': 15}),
                 dcc.Checklist(
                     id='weather-conditions-selector',
                     options=[
@@ -175,7 +177,8 @@ controls = dbc.Card(
                             {'label': 'No Precipitation', 'value': 2}
                     ],
                     value=[0, 1, 2],
-                    style={'font-size': 14, 'padding-left': '4%'}
+                    inputStyle={"margin-right": "10px"},
+                    style={'font-size': 14, 'padding-left': '5%'}
                 )
             ]
         ),
@@ -282,12 +285,12 @@ def generate_query(n_clicks, direction, days, weather):
         query = dedent(
             f"""
             SELECT
-                d.direction AS "Direction",
-                d.station_code AS "Station",
-                ROUND(AVG(d.depart_diff), 2) AS "Average Delay",
+                t.direction AS "Direction",
+                t.station_code AS "Station",
+                ROUND(AVG(t.timedelta_from_sched), 2) AS "Average Delay",
                 COUNT(*) AS "Num Records"
             FROM
-                departures d
+                all_trains t
                 INNER JOIN (
                 SELECT
                     precip_type,
@@ -305,12 +308,12 @@ def generate_query(n_clicks, direction, days, weather):
                     ) si ON wh.location = si.weather_loc
                 WHERE
                     wh.precip_type IN {selected_precip}
-                ) wh ON wh.station_code = d.station_code AND
-                  DATE_TRUNC('hour', d.full_act_dep_datetime) = wh.date_time
+                ) wh ON wh.station_code = t.station_code AND
+                  DATE_TRUNC('hour', t.full_act_arr_dep_datetime) = wh.date_time
             WHERE
-                d.direction = {direction} AND
-                d.origin_week_day IN {selected_days}
-            GROUP BY d.station_code, d.direction;
+                t.direction = {direction} AND
+                t.sched_arr_dep_week_day IN {selected_days}
+            GROUP BY t.station_code, t.direction;
             """
         )
         try:

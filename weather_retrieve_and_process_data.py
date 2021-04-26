@@ -6,15 +6,17 @@ from datetime import date, timedelta
 
 assert os.environ.get('VC_TOKEN') is not None, 'empty weather API token!'
 
-locations = ['Boston,MA', 'Providence,RI', 'Kingston,RI', 'New%20London,CT',
-             'New%20Haven,CT', 'Stamford,CT', 'Manhattan,NY', 'Newark,NJ',
-             'Trenton,NJ', 'Philadelphia,PA', 'Wilmington,DE', 'Baltimore,MD',
-             'Baltimore%20BWI%20Airport,MD', 'New%20Carrollton,MD', 'Washington,DC']
+locations_urlstring = ['Boston,MA', 'Providence,RI', 'Kingston,RI', 'Westerly,RI', 'Mystic,CT'
+                       'New%20London,CT', 'Old%20Saybrook,CT', 'New%20Haven,CT', 'Bridgeport,CT',
+                       'Stamford,CT', 'New%20Rochelle,NY', 'Manhattan,NY', 'Newark,NJ', 'Iselin,NJ', 
+                       'Trenton,NJ', 'Philadelphia,PA', 'Wilmington,DE', 'Aberdeen,MD', 'Baltimore,MD',
+                       'Baltimore%20BWI%20Airport,MD', 'New%20Carrollton,MD', 'Washington,DC']
 
-location_names_for_files = ['Boston_MA', 'Providence_RI', 'Kingston_RI', 'New_London_CT',
-                            'New_Haven_CT', 'Stamford_CT', 'Manhattan_NY', 'Newark_NJ',
-                            'Trenton_NJ', 'Philadelphia_PA', 'Wilmington_DE', 'Baltimore_MD',
-                            'Baltimore_BWI_Airport_MD', 'New_Carrollton_MD', 'Washington_DC']
+locations_filestring = ['Boston_MA', 'Providence_RI', 'Kingston_RI', 'Westerly_RI', 'Mystic_CT'
+                        'New_London_CT', 'Old_Saybrook_CT', 'New_Haven_CT', 'Bridgeport_CT', 
+                        'Stamford_CT', 'New_Rochelle_NY', 'Manhattan_NY', 'Newark_NJ', 'Iselin_NJ', 
+                        'Trenton_NJ', 'Philadelphia_PA', 'Wilmington_DE','Aberdeen_MD', 'Baltimore_MD',
+                        'Baltimore_BWI_Airport_MD', 'New_Carrollton_MD', 'Washington_DC']
 
 yesterday = str(date.today()-timedelta(days=1))
 
@@ -35,17 +37,18 @@ def retrieve_weather_data(start=yesterday, end=yesterday):
     """
     URL_ROOT = 'https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/'
     QUERY_TYPE = 'weatherdata/history?&aggregateHours=1'
-    DATES = '&startDateTime={}T00:00:00&endDateTime={}T23:59:00&unitGroup'.format(start, end)
-    URL_BASE = URL_ROOT + QUERY_TYPE + DATES
+    DATES = '&startDateTime={}T00:00:00&endDateTime={}T23:59:00'.format(start, end)
+    EXTRA_PARAMS = '&collectStationContributions=true&unitGroup=us&contentType=csv'
+    URL_BASE = URL_ROOT + QUERY_TYPE + DATES + EXTRA_PARAMS
     URL_KEY = '&key=' + os.environ.get('VC_TOKEN')
     successful_retrievals = []
     failed_retrievals = []
-    for locname, filename in zip(locations, location_names_for_files):
+    for locname, filename in zip(locations_urlstring, locations_filestring):
         print('Retrieving data for LOCATION: {}'.format(filename))
         print('    and DATE RANGE: {}T00:00:00 to {}T23:59:00'.format(start, end))
         CSVstring = './data/weather_original/{}_weather_data_{}_{}.csv'.format(filename, start, end)
         if not os.path.exists(CSVstring):
-            URL_LOC = '=us&contentType=csv&location=' + locname
+            URL_LOC = '&location=' + locname
             URL = URL_BASE + URL_LOC + URL_KEY
             response = requests.get(URL)
             try:
@@ -87,43 +90,29 @@ def process_weather_data(files_to_process):
                 nothing (updates the yearly combined data CSV file on disk)
     Example:
             files_to_process = [
-                (
-                    'Boston_MA',
-                    './data/weather_original/Boston_MA_weather_data_2021-04-11_2021-04-11.csv'
-                )
+                ('Boston_MA', './data/weather_original/Boston_MA_weather_data_2021-04-11_2021-04-11.csv')
             ]
             process_weather_data(files_to_process)
     """
     successful_processes = []
-    for location, CSVstring in files_to_process:
-        cols_list = ['Address', 'Date time', 'Latitude', 'Longitude', 'Temperature',
-                     'Precipitation', 'Cloud Cover', 'Conditions']
-        full_weather = pd.read_csv(CSVstring, usecols=cols_list)
+    for location, read_string in files_to_process:
+        cols_list = ['Address', 'Date time', 'Latitude', 'Longitude', 'Temperature', 
+                     'Weather Type', 'Precipitation', 'Cloud Cover', 'Conditions']
+        full_weather = pd.read_csv(read_string, usecols=cols_list)
         full_weather['Address'] = full_weather['Address'].str.replace(',', ', ')
+        full_weather = full_weather[['Address', 'Date time', 'Temperature', 'Precipitation', 'Cloud Cover', 
+                                     'Conditions', 'Weather Type', 'Latitude', 'Longitude']]
+        drop_na_index = full_weather[['Temperature','Precipitation','Cloud Cover']].replace('', np.nan).dropna().index
+        full_weather = full_weather.iloc[drop_na_index]
         dropna_weather = full_weather.replace('', np.nan).dropna()
         frac_kept = dropna_weather.shape[0]/full_weather.shape[0]
-        cond_cols = dropna_weather['Conditions'].str.split(', ', expand=True)
-        precip_marker = cond_cols[0].loc[cond_cols[0].isin(['Rain', 'Snow'])]
-        not_precip_marker = cond_cols[0].loc[cond_cols.index.difference(precip_marker.index)]
-        precip_column = pd.Series(index=dropna_weather.index, dtype='object')
-        precip_column.iloc[precip_marker.index] = precip_marker.values
-        precip_column.iloc[not_precip_marker.index] = 'No Precipitation'
-        dropna_weather['Precipitation Type'] = precip_column
-        prev_2021_CSVstring = './data/weather/{}_weather_2021_subset.csv'.format(location)
-        prev_weather = pd.read_csv(prev_2021_CSVstring)
+        prev2021_filestring = './data/weather/{}_weather_subset_2021.csv'.format(location)
+        prev_weather = pd.read_csv(prev2021_filestring)
         combined_weather = pd.concat([prev_weather, dropna_weather], ignore_index=True, axis=0)
         combined_weather.drop_duplicates(inplace=True, ignore_index=True)
-        combined_weather.to_csv(prev_2021_CSVstring, index=False)
-        successful_processes.append((CSVstring, frac_kept))
+        combined_weather.to_csv(prev2021_filestring, index=False)
+        successful_processes.append((prev2021_filestring, frac_kept))
     print('Successfully processed and combined the following raw data files with previous data:')
     for filestring, fraction in successful_processes:
         print('        FILE:          {}'.format(filestring))
         print('        FRACTION KEPT: {}'.format(fraction))
-
-
-if __name__ == '__main__':
-    # For quick and easy data retrieval on a daily basis, this is set up so that it will just
-    # retieve yesterdays data when called from the command line.
-    successful_retrievals = retrieve_weather_data()
-    if len(successful_retrievals) > 0:
-        process_weather_data(files_to_process=successful_retrievals)

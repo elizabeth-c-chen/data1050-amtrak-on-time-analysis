@@ -16,11 +16,14 @@ def make_dict():
     """
     Creates dictionary to hold raw data sorted by arrival and direction, then by station.
     """
-    dictionary = {'Arrive': {s: [] for s in ['NYP', 'BOS', 'WAS']},
-                  'Depart': {s: [] for s in ['BOS', 'WAS', 'NHV', 'NYP', 'PHL', 'BAL',
-                                             'PVD', 'WIL', 'BWI', 'NWK', 'BBY', 'RTE',
-                                             'TRE', 'STM', 'NCR', 'KIN', 'NLC']}}
+    dictionary = {'Arrive': {s: [] for s in ['NYP', 'NHV', 'PHL', 'BOS', 'WAS']},
+                  'Depart': {s: [] for s in ['BOS', 'BBY', 'RTE', 'PVD', 'KIN', 
+                                             'WLY', 'MYS', 'NLC', 'OSB', 'NHV', 
+                                             'BRP', 'STM', 'NRO', 'NYP', 'NWK', 
+                                             'EWR', 'MET', 'TRE', 'PHL', 'WIL', 
+                                             'ABE', 'BAL', 'BWI', 'NCR', 'WAS']}}
     return dictionary
+
 
 
 def convert_train_nums_to_string(train_nums_list):
@@ -59,9 +62,9 @@ def construct_urls(northbound_trains, southbound_trains, start_date, end_date):
     DEP = '&sort=schDp'
     URL_END = '&sort_dir=ASC&co=gt&limit_mins=&dfon=1'
     DATES = convert_dates_to_string(start_date, end_date)
-    arrive = ['NYP']
-    depart = ['NHV', 'NYP', 'PHL', 'BAL', 'PVD', 'WIL', 'BWI', 'NWK',
-              'BBY', 'RTE', 'TRE', 'STM', 'NCR', 'KIN', 'NLC']
+    arrive = ['NYP', 'NHV', 'PHL']
+    depart = ['BBY', 'RTE', 'PVD', 'KIN', 'WLY', 'MYS', 'NLC', 'OSB', 'NHV', 'BRP', 'STM', 'NRO', 
+              'NYP', 'NWK', 'EWR', 'MET', 'TRE', 'PHL', 'WIL', 'ABE', 'BAL', 'BWI', 'NCR']
     urls = {'Arrive': [], 'Depart': []}
     for trains_list in northbound_trains:
         TRAINS = convert_train_nums_to_string(trains_list)
@@ -95,11 +98,11 @@ def make_request(url):
     try:
         response = requests.get(url, timeout=30)
         response.raise_for_status()
+        page = response.content
     except requests.exceptions.HTTPError as e:
         print("An error occurred while retrieving data for the following url:")
         print('        {}'.format(url))
-        print("Error: {}".format(e))
-    page = response.content
+        print("        Error: {}".format(e))
     return page
 
 
@@ -109,11 +112,11 @@ def retrieve_data(start=date.today()-timedelta(days=1), end=date.today()):
     start and end dates, defaults to retrieving data for yesterday.
     """
     # If querying a long time period, it is better to use smaller groups of trains (more requests)
-    # northbound = [[66, 82, 86, 88], [94, 132, 150], [160, 162, 164, 166], [168, 170, 172, 174]]
-    # southbound = [[67, 83, 93, 95], [99, 135, 137, 139], [161, 163, 165,167],[171, 173, 175, 195]]
+    northbound = [[66, 82, 86, 88, 94, 132, 96, 176, 178, 190, 194], [150, 160, 162, 164, 166, 168, 170, 172, 174]]
+    southbound = [[67, 83, 93, 95, 99, 135, 65, 149, 169, 177], [137, 139, 161, 163, 165, 167, 171, 173, 175, 195]]
     # If only querying a few days, we can just do them all at once
-    northbound = [[66, 82, 86, 88, 94, 132, 150, 160, 162, 164, 166, 168, 170, 172, 174]]
-    southbound = [[67, 83, 93, 95, 99, 135, 137, 139, 161, 163, 165, 167, 171, 173, 175, 195]]
+  #  northbound = [[66, 82, 86, 88, 94, 132, 96, 176, 178, 190, 194, 150, 160, 162, 164, 166, 168, 170, 172, 174]]
+  #  southbound = [[67, 83, 93, 95, 99, 135, 65, 149, 169, 177, 137, 139, 161, 163, 165, 167, 171, 173, 175, 195]]   
     # Function can be found in fetch_data.py. It constructs the proper URL to run the query
     urls = construct_urls(northbound, southbound, start, end)
     raw_data = make_dict()
@@ -208,7 +211,11 @@ def raw_data_to_raw_df(raw_data, arrive_or_depart):
                     else:
                         continue
             else:
-                print("No data for this period, or an error occurred", station, arrive_or_depart)
+                trains_list = [[66, 82, 86, 88, 94, 132, 96, 176, 178, 190, 194], 
+                               [150, 160, 162, 164, 166, 168, 170, 172, 174], 
+                               [67, 83, 93, 95, 99, 135, 65, 149, 169, 177], 
+                               [137, 139, 161, 163, 165, 167, 171, 173, 175, 195]]
+                print("STATION:   {}  ({}) - Train # Group: {} | No data for time period, or an error occurred during data retrieval.".format(station, arrive_or_depart, trains_list[i]))
     return pd.DataFrame.from_dict(data_dict)
 
 
@@ -277,29 +284,3 @@ def process_columns(df, arrive_or_depart):
     new_df['Service Disruption'] = df['Service Disruption'].astype(int)
     new_df['Cancellations'] = df['Cancellations'].astype(int)
     return new_df.replace('', np.nan).dropna()
-
-
-if __name__ == '__main__':
-    start = date.today()-timedelta(days=1)
-    end = date.today()
-    raw_data = retrieve_data(start=start, end=end)
-    if raw_data is not None:
-        depart = raw_data_to_raw_df(raw_data, 'Depart')
-        arrive = raw_data_to_raw_df(raw_data, 'Arrive')
-        arrive_filestring = './data/trains/raw_arrive_{}_{}.csv'.format(str(start), str(end))
-        depart_filestring = './data/trains/raw_depart_{}_{}.csv'.format(str(start), str(end))
-        arrive.to_csv(arrive_filestring, line_terminator='\n', index=False)
-        depart.to_csv(depart_filestring, line_terminator='\n', index=False)
-        full_arrive = process_columns(arrive, 'Arrive')
-        full_depart = process_columns(depart, 'Depart')
-        arrive_filestring2021 = './data/trains/processed_arrive_2021.csv'
-        depart_filestring2021 = './data/trains/processed_depart_2021.csv'
-        prev_arrive2021 = pd.read_csv(arrive_filestring2021)
-        prev_depart2021 = pd.read_csv(depart_filestring2021)
-        new_arrive2021 = pd.concat([prev_arrive2021, full_arrive], ignore_index=True, axis=0)
-        new_depart2021 = pd.concat([prev_depart2021, full_depart], ignore_index=True, axis=0)
-        new_arrive2021.to_csv(arrive_filestring2021, line_terminator='\n', index=False)
-        new_depart2021.to_csv(depart_filestring2021, line_terminator='\n', index=False)
-        print('Successfully retrieved and processed data for DATE: {}'.format(start))
-    else:
-        print('Failed to retrieve data.')
