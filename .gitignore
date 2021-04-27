@@ -3,9 +3,8 @@ logfile
 Untitled*
 temp*
 __pycache__/
-.ipynb_checkpoints/
-.vscode/
+.*/
 assets/
 data/
 local/
-project_db/
+*db/
