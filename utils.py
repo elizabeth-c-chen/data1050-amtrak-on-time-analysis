@@ -82,9 +82,9 @@ def get_colors(geo_route, query_df):
     colors, scale = plotly.colors.convert_colors_to_same_type(plotly.colors.sequential.Turbo)
     colorscale = plotly.colors.make_colorscale(colors, scale=scale)
     if direction == 'Northbound':
-        color_group_key = 'NB_Group'
+        color_group_key = 'NB Station Group'
     elif direction == 'Southbound':
-        color_group_key = 'SB_Group'
+        color_group_key = 'SB Station Group'
     station_column = geo_route[color_group_key]
     colors = {station: 'rgb(0,0,0)' for station in station_column.unique()}
     scaled_delay = query_df['Average Delay'] / query_df['Average Delay'].max()

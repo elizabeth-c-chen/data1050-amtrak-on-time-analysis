@@ -6,13 +6,13 @@ from datetime import date, timedelta
 
 assert os.environ.get('VC_TOKEN') is not None, 'empty weather API token!'
 
-locations_urlstring = ['Boston,MA', 'Providence,RI', 'Kingston,RI', 'Westerly,RI', 'Mystic,CT'
+locations_urlstring = ['Boston,MA', 'Providence,RI', 'Kingston,RI', 'Westerly,RI', 'Mystic,CT',
                        'New%20London,CT', 'Old%20Saybrook,CT', 'New%20Haven,CT', 'Bridgeport,CT',
                        'Stamford,CT', 'New%20Rochelle,NY', 'Manhattan,NY', 'Newark,NJ', 'Iselin,NJ', 
                        'Trenton,NJ', 'Philadelphia,PA', 'Wilmington,DE', 'Aberdeen,MD', 'Baltimore,MD',
                        'Baltimore%20BWI%20Airport,MD', 'New%20Carrollton,MD', 'Washington,DC']
 
-locations_filestring = ['Boston_MA', 'Providence_RI', 'Kingston_RI', 'Westerly_RI', 'Mystic_CT'
+locations_filestring = ['Boston_MA', 'Providence_RI', 'Kingston_RI', 'Westerly_RI', 'Mystic_CT',
                         'New_London_CT', 'Old_Saybrook_CT', 'New_Haven_CT', 'Bridgeport_CT', 
                         'Stamford_CT', 'New_Rochelle_NY', 'Manhattan_NY', 'Newark_NJ', 'Iselin_NJ', 
                         'Trenton_NJ', 'Philadelphia_PA', 'Wilmington_DE','Aberdeen_MD', 'Baltimore_MD',
@@ -46,7 +46,7 @@ def retrieve_weather_data(start=yesterday, end=yesterday):
     for locname, filename in zip(locations_urlstring, locations_filestring):
         print('Retrieving data for LOCATION: {}'.format(filename))
         print('    and DATE RANGE: {}T00:00:00 to {}T23:59:00'.format(start, end))
-        CSVstring = './data/weather_original/{}_weather_data_{}_{}.csv'.format(filename, start, end)
+        CSVstring = './data/weather_raw/{}_weather_data_{}_{}.csv'.format(filename, start, end)
         if not os.path.exists(CSVstring):
             URL_LOC = '&location=' + locname
             URL = URL_BASE + URL_LOC + URL_KEY
@@ -90,25 +90,24 @@ def process_weather_data(files_to_process):
                 nothing (updates the yearly combined data CSV file on disk)
     Example:
             files_to_process = [
-                ('Boston_MA', './data/weather_original/Boston_MA_weather_data_2021-04-11_2021-04-11.csv')
+                ('Boston_MA', './data/weather_raw/Boston_MA_weather_data_2021-04-11_2021-04-11.csv')
             ]
             process_weather_data(files_to_process)
     """
     successful_processes = []
     for location, read_string in files_to_process:
         cols_list = ['Address', 'Date time', 'Latitude', 'Longitude', 'Temperature', 
-                     'Weather Type', 'Precipitation', 'Cloud Cover', 'Conditions']
+                     'Weather Type', 'Precipitation', 'Cloud Cover']
         full_weather = pd.read_csv(read_string, usecols=cols_list)
         full_weather['Address'] = full_weather['Address'].str.replace(',', ', ')
-        full_weather = full_weather[['Address', 'Date time', 'Temperature', 'Precipitation', 'Cloud Cover', 
-                                     'Conditions', 'Weather Type', 'Latitude', 'Longitude']]
+        full_weather = full_weather[['Address', 'Date time', 'Temperature', 'Precipitation', 
+                                     'Cloud Cover', 'Weather Type', 'Latitude', 'Longitude']]
         drop_na_index = full_weather[['Temperature','Precipitation','Cloud Cover']].replace('', np.nan).dropna().index
         full_weather = full_weather.iloc[drop_na_index]
-        dropna_weather = full_weather.replace('', np.nan).dropna()
-        frac_kept = dropna_weather.shape[0]/full_weather.shape[0]
+        frac_kept = dropna_index.shape[0]/full_weather.shape[0]
         prev2021_filestring = './data/weather/{}_weather_subset_2021.csv'.format(location)
         prev_weather = pd.read_csv(prev2021_filestring)
-        combined_weather = pd.concat([prev_weather, dropna_weather], ignore_index=True, axis=0)
+        combined_weather = pd.concat([prev_weather, full_weather], ignore_index=True, axis=0)
         combined_weather.drop_duplicates(inplace=True, ignore_index=True)
         combined_weather.to_csv(prev2021_filestring, index=False)
         successful_processes.append((prev2021_filestring, frac_kept))
