@@ -29,7 +29,7 @@ geo_info_query = dedent(
     """
     SELECT
         station_code AS "STNCODE",
-        station_name as "STNNAME",
+        amtrak_station_name as "STNNAME",
         longitude as "LON",
         latitude as "LAT"
     FROM
@@ -58,40 +58,24 @@ default_query = dedent(
             SELECT
                 t.direction AS "Direction",
                 t.station_code AS "Station",
-                ROUND(AVG(t.timedelta_from_sched), 2) AS "Average Delay",
+                t.sb_mile,
+                t.arrival_or_departure AS "Arrival or Departure",
+                CAST(AVG(t.timedelta_from_sched) AS INTEGER) AS "Average Delay",
                 COUNT(*) AS "Num Records"
             FROM
-                all_trains t
-                INNER JOIN (
-                SELECT
-                    precip_type,
-                    date_time,
-                    location,
-                    si.station_code AS station_code
-                FROM
-                    weather_hourly wh
-                    INNER JOIN (
-                        SELECT
-                            station_code,
-                            weather_loc
-                        FROM
-                            station_info
-                    ) si ON wh.location = si.weather_loc
-                WHERE
-                    wh.precip_type IN ('Rain', 'Snow', 'No Precipitation')
-                ) wh ON wh.station_code = t.station_code AND
-                DATE_TRUNC('hour', t.full_act_arr_dep_datetime) = wh.date_time
+                full_joined t
             WHERE
                 t.direction = 'Southbound' AND
-                t.origin_week_day IN
+                t.sched_arr_dep_week_day IN
                     ('Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday')
-            GROUP BY t.station_code, t.direction;
+            GROUP BY t.station_code, t.direction, t.sb_mile, t.arrival_or_departure
+            ORDER BY t.sb_mile ASC;
             """
 )
 default_query_df = connect_and_query(default_query)
-colors, delays, color_group_key = get_colors(geo_route, default_query_df)
+colors_dict, delays, color_group_key = get_colors(geo_route, default_query_df)
 
-# Info for map -- change later
+# Info for map
 amtrak_stations = list(geo_info['STNCODE'])
 location_names = list(geo_info['STNNAME'])
 map_style = 'outdoors'
@@ -102,10 +86,11 @@ route = px.line_mapbox(geo_route,
                        lon=geo_route['Longitude'],
                        line_group=geo_route['Connecting Path'],
                        color=geo_route[color_group_key],
-                       color_discrete_map=colors,
+                       color_discrete_map=colors_dict,
                        hover_data={color_group_key: False, 'Group': False},
                        mapbox_style=map_style,
                        zoom=5.75)
+#route.update_mapboxes(style=)
 route.update_traces(line=dict(width=3))
 
 route.add_trace(go.Scattermapbox(lat=geo_info['LAT'].round(decimals=5),
@@ -123,6 +108,7 @@ route.add_trace(go.Scattermapbox(lat=geo_info['LAT'].round(decimals=5),
 route.update_layout(
     dict(paper_bgcolor="white", plot_bgcolor="white",
          margin=dict(t=35, l=80, b=0, r=0)))
+
 route.update_yaxes(automargin=True)
 
 config = dict({'scrollZoom': False})
@@ -166,22 +152,22 @@ controls = dbc.Card(
                 )
             ]
         ),
-        dbc.FormGroup(
-            [
-                dbc.Label('Select one or more precipitation conditions to include', style={'font-size': 15}),
-                dcc.Checklist(
-                    id='weather-conditions-selector',
-                    options=[
-                            {'label': 'Rain', 'value': 0},
-                            {'label': 'Snow', 'value': 1},
-                            {'label': 'No Precipitation', 'value': 2}
-                    ],
-                    value=[0, 1, 2],
-                    inputStyle={"margin-right": "10px"},
-                    style={'font-size': 14, 'padding-left': '5%'}
-                )
-            ]
-        ),
+  #      dbc.FormGroup(
+  #          [
+  #              dbc.Label('Select one or more precipitation conditions to include', style={'font-size': 15}),
+  #              dcc.Checklist(
+  #                  id='weather-conditions-selector',
+  #                  options=[
+  #                          {'label': 'Rain', 'value': 0},
+  #                          {'label': 'Snow', 'value': 1},
+  #                          {'label': 'No Precipitation', 'value': 2}
+  #                  ],
+  #                  value=[0, 1, 2],
+  #                  inputStyle={"margin-right": "10px"},
+  #                  style={'font-size': 14, 'padding-left': '5%'}
+  #              )
+  #          ]
+  #      ),
 #        dbc.FormGroup(
 #            [
 #                dbc.Label('Enter a range of allowed delays in minutes (max = 600)'),
@@ -227,7 +213,8 @@ viz = dbc.Card(
         dcc.Graph(
             id='geo-route',
             config=config,
-            figure=route)
+            figure=route,
+            style=dict(height=550, width=1000))
     ],
     body=True
 )
@@ -268,54 +255,39 @@ app.layout = dbc.Container(
     ],
     [
         State('direction-selector', 'value'),
-        State('days-of-week-checkboxes', 'value'),
-        State('weather-conditions-selector', 'value'),
+        State('days-of-week-checkboxes', 'value')#,
+   #     State('weather-conditions-selector', 'value'),
 #        State('min-delay', 'value'),
 #        State('max-delay', 'value'),
 #        State('allow-sd-choice', 'value'),
 #        State('allow-cancel-choice', 'value')
     ]
 )
-def generate_query(n_clicks, direction, days, weather):
+def generate_query(n_clicks, direction, days): #, weather):
     if n_clicks is None:
         raise dash.exceptions.PreventUpdate
     else:
         selected_days = get_days(days)
-        selected_precip = get_precip(weather)
+             #   selected_precip = get_precip(weather) 
         query = dedent(
             f"""
             SELECT
                 t.direction AS "Direction",
                 t.station_code AS "Station",
-                ROUND(AVG(t.timedelta_from_sched), 2) AS "Average Delay",
+                t.sb_mile,
+                t.arrival_or_departure AS "Arrival or Departure",
+                CAST(AVG(t.timedelta_from_sched) AS INTEGER) AS "Average Delay",
                 COUNT(*) AS "Num Records"
             FROM
-                all_trains t
-                INNER JOIN (
-                SELECT
-                    precip_type,
-                    date_time,
-                    location,
-                    si.station_code AS station_code
-                FROM
-                    weather_hourly wh
-                    INNER JOIN (
-                        SELECT
-                            station_code,
-                            weather_loc
-                        FROM
-                            station_info
-                    ) si ON wh.location = si.weather_loc
-                WHERE
-                    wh.precip_type IN {selected_precip}
-                ) wh ON wh.station_code = t.station_code AND
-                  DATE_TRUNC('hour', t.full_act_arr_dep_datetime) = wh.date_time
+                full_joined t
             WHERE
                 t.direction = {direction} AND
                 t.sched_arr_dep_week_day IN {selected_days}
-            GROUP BY t.station_code, t.direction;
+            GROUP BY t.station_code, t.direction, t.sb_mile, t.arrival_or_departure
+            ORDER BY t.sb_mile ASC;
             """
         )
+        print(query)
         try:
             t0 = time.time()
             query_df = connect_and_query(query)
@@ -333,7 +305,7 @@ def generate_query(n_clicks, direction, days, weather):
             color_discrete_map=colors,
             hover_data={color_group_key: False, 'Group': False},
             mapbox_style=map_style,
-            zoom=5.75)
+            zoom=6)
         route.update_traces(line=dict(width=3))
         route.add_trace(go.Scattermapbox(
             lat=geo_info.LAT.round(decimals=5),

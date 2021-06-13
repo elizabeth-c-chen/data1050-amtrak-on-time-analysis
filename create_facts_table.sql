@@ -1,7 +1,22 @@
+CREATE FUNCTION get_all_stop_ids (origin_date date, train_num text, OUT stop_id int, OUT station_code text)
+	RETURNS SETOF record
+	AS $$
+	SELECT
+		stop_id,
+		station_code
+	FROM
+		full_joined
+	WHERE
+		origin_date = $1
+		AND train_num = $2;
+
+$$
+LANGUAGE SQL;
+
 SELECT
 	d.trip_id,
-	d.origin_date,
-	d.train_num,
+	-- d.origin_date,
+	--	d.train_num,
 	CASE WHEN s.stop_id EXISTS THEN
 		AS s.BOS_stop_id,
 		s.stop_id AS BBY_stop_id,
