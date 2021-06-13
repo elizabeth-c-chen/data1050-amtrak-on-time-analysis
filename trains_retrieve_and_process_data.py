@@ -115,8 +115,8 @@ def retrieve_data(start=date.today()-timedelta(days=1), end=date.today()):
     northbound = [[66, 82, 86, 88, 94, 132, 96, 176, 178, 190, 194], [150, 160, 162, 164, 166, 168, 170, 172, 174]]
     southbound = [[67, 83, 93, 95, 99, 135, 65, 149, 169, 177], [137, 139, 161, 163, 165, 167, 171, 173, 175, 195]]
     # If only querying a few days, we can just do them all at once
-  #  northbound = [[66, 82, 86, 88, 94, 132, 96, 176, 178, 190, 194, 150, 160, 162, 164, 166, 168, 170, 172, 174]]
-  #  southbound = [[67, 83, 93, 95, 99, 135, 65, 149, 169, 177, 137, 139, 161, 163, 165, 167, 171, 173, 175, 195]]   
+    # northbound = [[66, 82, 86, 88, 94, 132, 96, 176, 178, 190, 194, 150, 160, 162, 164, 166, 168, 170, 172, 174]]
+    # southbound = [[67, 83, 93, 95, 99, 135, 65, 149, 169, 177, 137, 139, 161, 163, 165, 167, 171, 173, 175, 195]]   
     # Function can be found in fetch_data.py. It constructs the proper URL to run the query
     urls = construct_urls(northbound, southbound, start, end)
     raw_data = make_dict()

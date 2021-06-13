@@ -96,15 +96,14 @@ def process_weather_data(files_to_process):
     """
     successful_processes = []
     for location, read_string in files_to_process:
-        cols_list = ['Address', 'Date time', 'Latitude', 'Longitude', 'Temperature', 
+        cols_list = ['Address', 'Date time', 'Temperature', 
                      'Weather Type', 'Precipitation', 'Cloud Cover']
         full_weather = pd.read_csv(read_string, usecols=cols_list)
         full_weather['Address'] = full_weather['Address'].str.replace(',', ', ')
-        full_weather = full_weather[['Address', 'Date time', 'Temperature', 'Precipitation', 
-                                     'Cloud Cover', 'Weather Type', 'Latitude', 'Longitude']]
+        full_weather = full_weather[['Address', 'Date time', 'Temperature', 'Precipitation', 'Cloud Cover', 'Weather Type']]
         drop_na_index = full_weather[['Temperature','Precipitation','Cloud Cover']].replace('', np.nan).dropna().index
         full_weather = full_weather.iloc[drop_na_index]
-        frac_kept = dropna_index.shape[0]/full_weather.shape[0]
+        frac_kept = drop_na_index.shape[0]/full_weather.shape[0]
         prev2021_filestring = './data/weather/{}_weather_subset_2021.csv'.format(location)
         prev_weather = pd.read_csv(prev2021_filestring)
         combined_weather = pd.concat([prev_weather, full_weather], ignore_index=True, axis=0)
