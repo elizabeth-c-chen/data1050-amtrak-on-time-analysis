@@ -88,63 +88,25 @@ def get_colors(geo_route, query_df):
     station_column = geo_route[color_group_key]
     delays = query_df['Average Delay']
     colors_dict = {station: 'rgb(0,0,0)' for station in station_column.unique()}
-    # Change these numbers later
     for station in query_df['Station']:
         if station != arrival_station:
-            td_minutes = delays.loc[(query_df['Station'] == station)  & (query_df['Arrival or Departure'] == 'Departure') ].values[0]
-            if td_minutes <= 0:
-                colors_dict[station] = get_continuous_color(colorscale, 0.15)
-            elif td_minutes > 0 and td_minutes <= 5:
-                colors_dict[station] = get_continuous_color(colorscale, 0.4)
-            elif td_minutes > 5 and td_minutes <= 8:
-                colors_dict[station] = get_continuous_color(colorscale, 0.55)
-            elif td_minutes > 8 and td_minutes <= 12:
-                colors_dict[station] = get_continuous_color(colorscale, 0.67)
-            elif td_minutes > 12 and td_minutes <= 16:
-                colors_dict[station] = get_continuous_color(colorscale, 0.8)
-            elif td_minutes > 16 and td_minutes <= 20:
-                colors_dict[station] = get_continuous_color(colorscale, 0.9)
-            elif td_minutes > 20: 
-                colors_dict[station] = get_continuous_color(colorscale, 1)
+            arr_or_dep = 'Departure'
         elif station == arrival_station:
-            td_minutes = delays.loc[(query_df['Station'] == station)  & (query_df['Arrival or Departure'] == 'Arrival') ].values[0]
-            if td_minutes <= 0:
-                colors_dict[station] = get_continuous_color(colorscale, 0.15)
-            elif td_minutes > 0 and td_minutes <= 5:
-                colors_dict[station] = get_continuous_color(colorscale, 0.4)
-            elif td_minutes > 5 and td_minutes <= 8:
-                colors_dict[station] = get_continuous_color(colorscale, 0.55)
-            elif td_minutes > 8 and td_minutes <= 12:
-                colors_dict[station] = get_continuous_color(colorscale, 0.67)
-            elif td_minutes > 12 and td_minutes <= 16:
-                colors_dict[station] = get_continuous_color(colorscale, 0.8)
-            elif td_minutes > 16 and td_minutes <= 20:
-                colors_dict[station] = get_continuous_color(colorscale, 0.9)
-            elif td_minutes > 20: 
-                colors_dict[station] = get_continuous_color(colorscale, 1)
-
+            arr_or_dep = 'Arrival'
+        td_minutes = delays.loc[(query_df['Station'] == station)  & (query_df['Arrival or Departure'] == arr_or_dep) ].values[0]
+        # Change these numbers later
+        if td_minutes <= 0:
+            colors_dict[station] = get_continuous_color(colorscale, 0.15)
+        elif td_minutes > 0 and td_minutes <= 5:
+            colors_dict[station] = get_continuous_color(colorscale, 0.4)
+        elif td_minutes > 5 and td_minutes <= 8:
+            colors_dict[station] = get_continuous_color(colorscale, 0.55)
+        elif td_minutes > 8 and td_minutes <= 12:
+            colors_dict[station] = get_continuous_color(colorscale, 0.67)
+        elif td_minutes > 12 and td_minutes <= 16:
+            colors_dict[station] = get_continuous_color(colorscale, 0.8)
+        elif td_minutes > 16 and td_minutes <= 20:
+            colors_dict[station] = get_continuous_color(colorscale, 0.9)
+        elif td_minutes > 20: 
+            colors_dict[station] = get_continuous_color(colorscale, 1)
     return colors_dict, delays, color_group_key
-
-
- #   max_delay = query_df['Average Delay'].max()
-  #  min_delay = query_df['Average Delay'].min()
- #   min_delay_positive = query_df[query_df['Average Delay'] > 0].min()
-#def get_colors(geo_route, query_df):
- #   """
- #   Create the path color groups according to data from query.
- #   """
- # #  direction = query_df['Direction'].iloc[0]
- #   colors, scale = plotly.colors.convert_colors_to_same_type(plotly.colors.sequential.thermal)
- #   colorscale = plotly.colors.make_colorscale(colors, scale=scale)
-  #  if direction == 'Northbound':
-  #      color_group_key = 'NB Station Group'
-  #  elif direction == 'Southbound':
-  #      color_group_key = 'SB Station Group'
-  #  station_column = geo_route[color_group_key]
-  #  colors = {station: 'rgb(0,0,0)' for station in station_column.unique()}
-  #  scaled_delay = query_df['Average Delay'] / query_df['Average Delay'].max()
-   # for station in query_df['Station']:
-   #     delay_val = scaled_delay.loc[query_df['Station'] == station].values[0]
-     #   delay_color = get_continuous_color(colorscale, delay_val)
-    #    colors[station] = delay_color
-    #return colors, query_df['Average Delay'], color_group_key

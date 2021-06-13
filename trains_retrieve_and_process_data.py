@@ -144,6 +144,7 @@ def retrieve_data(start=date.today()-timedelta(days=1), end=date.today()):
 
 
 # Processing Data Functions
+
 def get_direction(num):
     """
     Return direction of the train (odd = Southbound, even = Northbound).
