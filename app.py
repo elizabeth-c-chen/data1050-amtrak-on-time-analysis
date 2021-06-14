@@ -63,7 +63,7 @@ default_query = dedent(
                 CAST(AVG(t.timedelta_from_sched) AS INTEGER) AS "Average Delay",
                 COUNT(*) AS "Num Records"
             FROM
-                full_joined t
+                stops_joined t
             WHERE
                 t.direction = 'Southbound' AND
                 t.sched_arr_dep_week_day IN
@@ -279,7 +279,7 @@ def generate_query(n_clicks, direction, days): #, weather):
                 CAST(AVG(t.timedelta_from_sched) AS INTEGER) AS "Average Delay",
                 COUNT(*) AS "Num Records"
             FROM
-                full_joined t
+                stops_joined t
             WHERE
                 t.direction = {direction} AND
                 t.sched_arr_dep_week_day IN {selected_days}
