@@ -11,7 +11,7 @@ from dash.dependencies import Input, Output, State
 import plotly.express as px
 import plotly.graph_objects as go
 
-from utils import connect_and_query, get_days, get_precip, get_colors
+from utils import *
 
 # Dash setup
 app = dash.Dash(__name__,
@@ -78,8 +78,14 @@ colors_dict, delays, color_group_key = get_colors(geo_route, default_query_df)
 # Info for map
 amtrak_stations = list(geo_info['STNCODE'])
 location_names = list(geo_info['STNNAME'])
-map_style = 'outdoors'
+#map_style = 'mapbox://styles/elizabethchen/ckpwoy47551i018mntxuxsge1'
+#contrast_color = '#EDEDED'
+#map_style = 'mapbox://styles/elizabethchen/ckpwpfj0v1xak17mwoyasccsm'
+#map_style = 'light'
+#contrast_color = 'black'
 
+map_style = 'mapbox://styles/elizabethchen/ckpwqldby4ta317nj9xfc1eeu'
+contrast_color = 'navy'
 # Route Visualization with Stand-in Color Coded Groups
 route = px.line_mapbox(geo_route,
                        lat=geo_route['Latitude'],
@@ -89,7 +95,7 @@ route = px.line_mapbox(geo_route,
                        color_discrete_map=colors_dict,
                        hover_data={color_group_key: False, 'Group': False},
                        mapbox_style=map_style,
-                       zoom=5.75)
+                       zoom=6.15)
 #route.update_mapboxes(style=)
 route.update_traces(line=dict(width=3))
 
@@ -101,7 +107,7 @@ route.add_trace(go.Scattermapbox(lat=geo_info['LAT'].round(decimals=5),
                                  hovertext=geo_info['STNNAME'],
                                  hovertemplate="%{hovertext} (Avg. Delay: %{customdata} mins)<extra></extra>",
                                  mode='markers',
-                                 marker={'size': 6, 'color': 'Navy'},
+                                 marker={'size': 6, 'color': contrast_color},
                                  fill='none'
                                  )
                 )
@@ -128,7 +134,8 @@ controls = dbc.Card(
                              {'label': 'Southbound', 'value': "\'Southbound\'"}],
                     value="\'Southbound\'",
                     inputStyle={"margin-right": "10px"},
-                    style={'font-size': 14, 'padding-left': '5%'}
+                    style={'font-size': 14, 'padding-left': '5%'},
+                    persistence=True
                 ),
             ]
         ),
@@ -148,65 +155,165 @@ controls = dbc.Card(
                     ],
                     value=[0, 1, 2, 3, 4, 5, 6],
                     inputStyle={"margin-right": "10px"},
-                    style={'font-size': 14, 'padding-left': '5%'}
+                    style={'font-size': 14, 'padding-left': '5%'},
+                    persistence=True
                 )
             ]
         ),
-  #      dbc.FormGroup(
-  #          [
-  #              dbc.Label('Select one or more precipitation conditions to include', style={'font-size': 15}),
-  #              dcc.Checklist(
-  #                  id='weather-conditions-selector',
-  #                  options=[
-  #                          {'label': 'Rain', 'value': 0},
-  #                          {'label': 'Snow', 'value': 1},
-  #                          {'label': 'No Precipitation', 'value': 2}
-  #                  ],
-  #                  value=[0, 1, 2],
-  #                  inputStyle={"margin-right": "10px"},
-  #                  style={'font-size': 14, 'padding-left': '5%'}
-  #              )
-  #          ]
-  #      ),
-#        dbc.FormGroup(
-#            [
-#                dbc.Label('Enter a range of allowed delays in minutes (max = 600)'),
-#                dcc.Input(id='min-delay', type='number', value=0, min=0, max=599),
-#                dcc.Input(id='max-delay', type='number', value=100, min=1, max=600)
-#            ]
-#        ),
-#        dbc.FormGroup(
-#            [
-#                dbc.Label('Allow data with known Service Disruptions in query?'),
-#                dcc.RadioItems(
-#                    id='allow-sd-choice',
-#                    options=[
-#                        {'label': 'Yes', 'value': "\'1\'"},
-#                        {'label': 'No', 'value': "\'0\'"}],
-#                    value="\'0\'")
-#            ]
-#        ),
-#        dbc.FormGroup(
-#            [
-#                dbc.Label('Allow data with known Cancellations in query?'),
-#                dcc.RadioItems(
-#                    id='allow-cancel-choice',
-#                    options=[
-#                        {'label': 'Yes', 'value': "\'1\'"},
-#                        {'label': 'No', 'value': "\'0\'"}
-#                    ],
-#                    value="\'0\'")
-#            ]
-#        ),
+        dbc.FormGroup(
+            [
+                dbc.Label('Allow data with known Service Disruptions?', style={'font-size': 15}),
+                dcc.RadioItems(
+                    id='sd-selector',
+                    options=[
+                        {'label': 'Yes', 'value': "\'0\' OR t.service_disruption = \'1\'"},
+                        {'label': 'No', 'value': "\'0\'"}],
+                    value="\'0\'",
+                    inputStyle={"margin-right": "10px"},
+                    style={'font-size': 14, 'padding-left': '5%'},
+                    persistence=True
+                )
+            ]
+        ),
+
+        dbc.FormGroup(
+            [
+                dbc.Label('Allow data with known Cancellations?', style={'font-size': 15}),
+                dcc.RadioItems(
+                    id='cancellation-selector',
+                    options=[
+                        {'label': 'Yes', 'value': "\'0\' OR t.cancellations = \'1\'"},
+                        {'label': 'No', 'value': "\'0\'"}
+                    ],
+                    value="\'0\'",
+                    inputStyle={"margin-right": "10px"},
+                    style={'font-size': 14, 'padding-left': '5%'},
+                    persistence=True
+                )
+            ]
+        ),
+        dbc.FormGroup(
+            [
+                dbc.Label('Select one of the following options to further filter the data', style={'font-size': 15}),
+                dcc.RadioItems(
+                    id='filter-type-selector',
+                    options=[{'label': 'Extreme Temperatures', 'value': "extreme-temp"},
+                             {'label': 'Season', 'value': "seasons"},
+                             {'label': 'Cloud Coverage', 'value': "cloud-cover"},
+                             {'label': 'Precipitation by Type', 'value': "precip-by-type"},
+                             {'label': 'Precipitation by Amount', 'value': "precip-by-amount"}
+                             ],
+                    value="extreme-temp",
+                    inputStyle={"margin-right": "10px"},
+                    style={'font-size': 14, 'padding-left': '5%'},
+                    persistence=True
+                )
+            ]
+        ),
+        dbc.Button(
+            'View Filtering Options',
+            color='primary',
+            id='set-filter-mode',
+            style={'font-size': 15}
+        ),
+        dbc.FormGroup(id='chosen-option-formgroup'),
         dbc.Button(
             "Submit Query and Plot Results",
+            id="send-query-button",        
             color="primary",
-            id='send-query-button',
-            style={'font-size': 15}
+            style={'font-size': 15, 'margin-top': '2.5%'},
+            disabled=True
         )
     ],
+    id="controls",
     body=True
 )
+
+temp_checkboxes = [
+    dbc.Label('Select temperature conditions', style={'font-size': 15, 'padding-top': '2.5%'}),
+    dcc.Checklist(
+        id='chosen-option',
+        options=[
+                {'label': 'Extreme Cold (temperature < 32\u00B0)', 'value': 'cold'},
+                {'label': 'Extreme Heat (temperature > 90\u00B0)', 'value': 'hot'},
+                {'label': 'Moderate Range (32\u00B0 ≤ temperature ≤90\u00B0) ', 'value': 'between'}
+        ],
+        value=['hot'],
+        inputStyle={"margin-right": "10px"},
+        style={'font-size': 14, 'padding-left': '5%', 'margin-bottom': '-15px'},
+        persistence=True
+    )
+]
+
+        
+cloud_cover_checkboxes = [
+    dbc.Label('Select one or more levels of cloudiness', style={'font-size': 15, 'padding-top': '2.5%'}),
+    dcc.Checklist(
+        id='chosen-option',
+        options=[
+            {'label': 'Clear', 'value': 'clear'},
+            {'label': 'Mostly Sunny to Partly Cloudy', 'value': 'partly cloudy'},
+            {'label': 'Partly Sunny to Mostly Cloudy', 'value': 'mostly cloudy'},
+            {'label': 'Overcast', 'value': 'overcast'}
+        ],
+        value=['clear'],
+        inputStyle={"margin-right": "10px"},
+        style={'font-size': 14, 'padding-left': '5%', 'margin-bottom': '-15px'},
+        persistence=True
+    )
+]
+
+precip_by_type = [
+    dbc.Label('Select one or more precipitation conditions to include', style={'font-size': 15, 'padding-top': '2.5%'}),
+    dcc.Checklist(
+        id='chosen-option',
+        options=[
+                {'label': 'No Precipitation', 'value': 'none'},
+                {'label': 'Rain', 'value': 'rain'},
+                {'label': 'Snow', 'value': 'snow'},
+                {'label': 'Other', 'value': 'other'}
+        ],
+        value=['rain', 'snow'],
+        inputStyle={"margin-right": "10px"},
+        style={'font-size': 14, 'padding-left': '5%', 'margin-bottom': '-15px'},
+        persistence=True
+    )
+]
+
+precip_by_amount = [
+    dbc.Label('Select a range of precipitation levels (rain, snow, and other precipitation included)', style={'font-size': 15, 'padding-top': '2.5%'}),
+    dcc.RangeSlider(
+        id='chosen-option',
+        min=0,
+        max=3,
+        step=None,
+        marks={
+            0: 'None',
+            1: 'Light',
+            2: 'Moderate',
+            3: 'Heavy'
+        },
+        value=[0,1],
+        persistence=True
+    )
+]
+
+seasons = [
+    dbc.Label('Select one or more seasons to include', style={'font-size': 15, 'padding-top': '2.5%'}),
+    dcc.Checklist(
+        id='chosen-option',
+        options=[
+                {'label': 'Fall', 'value': 3},
+                {'label': 'Winter', 'value': 0},
+                {'label': 'Spring', 'value': 1},
+                {'label': 'Summer', 'value': 2}
+            ],
+        value=[0,1,2,3],
+        inputStyle={"margin-right": "10px"},
+        style={'font-size': 14, 'padding-left': '5%', 'margin-bottom': '-15px'},
+        persistence=True
+    )
+]
 
 viz = dbc.Card(
     [
@@ -218,10 +325,11 @@ viz = dbc.Card(
     ],
     body=True
 )
+
 app.layout = dbc.Container(
     [
         html.H2("Amtrak Northeast Regional On-Time Performance Explorer"),
-        html.H5("A DATA 1050 Final Project by Elizabeth C. Chen"),
+        html.H5("A DATA 1050 Final Project by Elizabeth C. Chen", style={'padding-top': '-10px', 'padding-bottom': '-10px'}),
         html.Hr(),
         dbc.Row(
             [
@@ -244,6 +352,39 @@ app.layout = dbc.Container(
     fluid=True
 )
 
+submit_callback_states_list = get_submit_callback_states_list()
+
+@app.callback(
+    [
+        Output("chosen-option-formgroup", "children"), 
+        Output("send-query-button", "disabled")
+    ],
+    [
+        Input("set-filter-mode", "n_clicks")
+    ],
+    [
+        State("filter-type-selector", "value")
+    ]
+)
+def update_options(n_clicks, option_val):
+    if n_clicks is None:
+        submit_callback_states_list = set_submit_callback_states_list(n_clicks)
+        raise dash.exceptions.PreventUpdate
+    else: 
+        submit_callback_states_list = set_submit_callback_states_list(n_clicks)
+        if option_val == "extreme-temp":
+            choice = temp_checkboxes
+        elif option_val == "seasons":
+            choice = seasons
+        elif option_val == "cloud-cover":
+            choice = cloud_cover_checkboxes
+        elif option_val == "precip-by-type":
+            choice = precip_by_type
+        elif option_val == "precip-by-amount":
+            choice = precip_by_amount
+        return choice, False
+
+default_options = ['snow', 'rain', 'none', 'other']
 
 @app.callback(
     [
@@ -253,40 +394,59 @@ app.layout = dbc.Container(
     [
         Input("send-query-button", 'n_clicks')
     ],
-    [
-        State('direction-selector', 'value'),
-        State('days-of-week-checkboxes', 'value')#,
-   #     State('weather-conditions-selector', 'value'),
-#        State('min-delay', 'value'),
-#        State('max-delay', 'value'),
-#        State('allow-sd-choice', 'value'),
-#        State('allow-cancel-choice', 'value')
-    ]
+    submit_callback_states_list
 )
-def generate_query(n_clicks, direction, days): #, weather):
+
+def generate_query(n_clicks, direction, days, sd_choice, cancel_choice, option=default_options):
     if n_clicks is None:
         raise dash.exceptions.PreventUpdate
     else:
         selected_days = get_days(days)
-             #   selected_precip = get_precip(weather) 
-        query = dedent(
-            f"""
-            SELECT
-                t.direction AS "Direction",
-                t.station_code AS "Station",
-                t.sb_mile,
-                t.arrival_or_departure AS "Arrival or Departure",
-                CAST(AVG(t.timedelta_from_sched) AS INTEGER) AS "Average Delay",
-                COUNT(*) AS "Num Records"
-            FROM
-                stops_joined t
-            WHERE
-                t.direction = {direction} AND
-                t.sched_arr_dep_week_day IN {selected_days}
-            GROUP BY t.station_code, t.direction, t.sb_mile, t.arrival_or_departure
-            ORDER BY t.sb_mile ASC;
-            """
-        )
+        if option != default_options:
+            filter_query_string = get_query_string(option)
+            query = dedent(
+                f"""
+                SELECT
+                    t.direction AS "Direction",
+                    t.station_code AS "Station",
+                    t.sb_mile,
+                    t.arrival_or_departure AS "Arrival or Departure",
+                    CAST(AVG(t.timedelta_from_sched) AS INTEGER) AS "Average Delay",
+                    COUNT(*) AS "Num Records"
+                FROM
+                    stops_joined t
+                WHERE
+                    t.direction = {direction} AND
+                    t.sched_arr_dep_week_day IN {selected_days} AND
+                    t.service_disruption = {sd_choice} AND
+                    t.cancellations = {cancel_choice} 
+                """ + "AND " + filter_query_string + 
+                """
+                GROUP BY t.station_code, t.direction, t.sb_mile, t.arrival_or_departure
+                ORDER BY t.sb_mile ASC;
+                """
+            )
+        else:
+            query = dedent(
+                f"""
+                SELECT
+                    t.direction AS "Direction",
+                    t.station_code AS "Station",
+                    t.sb_mile,
+                    t.arrival_or_departure AS "Arrival or Departure",
+                    CAST(AVG(t.timedelta_from_sched) AS INTEGER) AS "Average Delay",
+                    COUNT(*) AS "Num Records"
+                FROM
+                    stops_joined t
+                WHERE
+                    t.direction = {direction} AND
+                    t.sched_arr_dep_week_day IN {selected_days} AND
+                    t.service_disruption = {sd_choice} AND
+                    t.cancellations = {cancel_choice} 
+                GROUP BY t.station_code, t.direction, t.sb_mile, t.arrival_or_departure
+                ORDER BY t.sb_mile ASC;
+                """
+            )
         print(query)
         try:
             t0 = time.time()
@@ -305,7 +465,7 @@ def generate_query(n_clicks, direction, days): #, weather):
             color_discrete_map=colors,
             hover_data={color_group_key: False, 'Group': False},
             mapbox_style=map_style,
-            zoom=6)
+            zoom=6.15)
         route.update_traces(line=dict(width=3))
         route.add_trace(go.Scattermapbox(
             lat=geo_info.LAT.round(decimals=5),
@@ -316,7 +476,7 @@ def generate_query(n_clicks, direction, days): #, weather):
             hovertext=geo_info['STNNAME'],
             hovertemplate="%{hovertext} (Avg. Delay: %{customdata} mins)<extra></extra>",
             mode='markers',
-            marker={'size': 6, 'color': 'Navy'},
+            marker={'size': 6, 'color': contrast_color},
             fill='none'
             )
         )

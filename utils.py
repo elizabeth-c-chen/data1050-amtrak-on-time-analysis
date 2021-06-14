@@ -2,9 +2,9 @@ import pandas as pd
 import psycopg2
 import os
 import plotly
+from dash.dependencies import Input, Output, State
 
 assert os.environ.get('DATABASE_URL') is not None, 'database URL is not set!'
-
 
 # Helper Functions
 def connect_and_query(query):
@@ -22,17 +22,76 @@ def get_days(days_selected):
             output += '\'' + day_names[i] + '\'' + ', '
     output = output[0:-2] + ')'
     return output
-
-
-def get_precip(precip_selected):
+def get_seasons(seasons_selected):
     output = '('
-    precip_types = ['Rain', 'Snow', 'No Precipitation']
-    for i in range(len(precip_types)):
-        if i in precip_selected:
-            output += '\'' + precip_types[i] + '\'' + ', '
+    for season in seasons_selected:
+        output += '\'' + season + '\'' + ', '
     output = output[0:-2] + ')'
-    return output
+    return f"t.season IN {output}"
 
+def get_extreme_temp(temp_selected):
+    output = '('
+    for temp in temp_selected:
+        output += '\'' + temp + '\'' + ', '
+    output = output[0:-2] + ')'
+    return f"t.extreme_temperature IN {output}"
+
+def get_cloud_levels(levels_selected):
+    output = '('
+    for level in levels_selected:
+        output += '\'' + level + '\'' + ', '
+    output = output[0:-2] + ')'
+    return f"t.cloud_level IN {output}"
+
+def get_precip_types(precip_selected):
+    output = '('
+    for precip in precip_selected:
+        output += '\'' + precip + '\'' + ', '
+    output = output[0:-2] + ')'
+    return f"t.precip_type IN {output}"
+
+def get_precip_levels(levels_selected):
+    output = '('
+    for level in range(levels_selected) + 1:
+        output += '\'' + level + '\'' + ', '
+    output = output[0:-2] + ')'
+    return f"t.precip_level IN {output}"
+
+def get_query_string(selected_items):
+    if selected_items[0] in {'Fall', 'Winter', 'Spring', 'Summer'}:
+        return get_seasons(selected_items)
+    elif selected_items[0] in {'hot', 'cold', 'between'}:
+        return get_extreme_temp(selected_items)
+    elif selected_items[0] in {'clear', 'partly cloudy', 'mostly cloudy', 'overcast'}:
+        return get_cloud_levels(selected_items)
+    elif selected_items[0] in {'light', 'moderate', 'heavy', 'none'}:
+        return get_precip_levels(selected_items)
+    elif selected_items[0] in {'snow', 'rain', 'other', 'no pcp'}:
+        return get_precip_types(selected_items)
+
+def set_submit_callback_states_list(n_clicks):
+    if n_clicks is not None:
+        submit_callback_states_list = [
+            State('direction-selector', 'value'),
+            State('days-of-week-checkboxes', 'value'),
+            State('sd-selector', 'value'),
+            State('cancellation-selector', 'value'),
+            State('chosen-option', 'value')
+        ]
+    else:
+        submit_callback_states_list = [
+            State('direction-selector', 'value'),
+            State('days-of-week-checkboxes', 'value'),
+            State('sd-selector', 'value'),
+            State('cancellation-selector', 'value')
+        ]
+    return submit_callback_states_list
+
+
+submit_callback_states_list = set_submit_callback_states_list(0)
+
+def get_submit_callback_states_list():
+    return  submit_callback_states_list
 
 def get_continuous_color(colorscale, intermed):
     """
