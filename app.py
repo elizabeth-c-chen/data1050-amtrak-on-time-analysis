@@ -1,7 +1,9 @@
 import os
 from textwrap import dedent
-import time 
+import time
+from datetime import date, timedelta, datetime
 
+import numpy as np
 import dash
 import dash_core_components as dcc
 import dash_bootstrap_components as dbc
@@ -11,20 +13,35 @@ from dash.dependencies import Input, Output, State
 import plotly.express as px
 import plotly.graph_objects as go
 
-from utils import *
+from utils import connect_and_query, get_colors, get_days, get_precip_types, get_sort_from_train_num, get_sort_from_direction
 
-# Dash setup
-app = dash.Dash(__name__,
-                external_stylesheets=[dbc.themes.BOOTSTRAP],
-                suppress_callback_exceptions=True)
+######################
+# DATABASE SETUP
+######################
+assert os.environ.get('DATABASE_URL') is not None, 'database URL is not set!'
+
+######################
+# DASH SETUP
+######################
+app = dash.Dash(
+    __name__,
+    suppress_callback_exceptions=True,
+    update_title=None
+)
 server = app.server
-app.title = 'DATA 1050 Project'
+app.title = "DATA 1050 Final Project"
 
-# Mapbox setup
-assert os.environ.get('MAPBOX_TOKEN') is not None, 'empty mapbox token!'
+app.layout = html.Div([
+    dcc.Location(id='url', refresh=False),
+    html.Div(id='page-content')
+])
+
+######################
+# MAP SETUP
+######################
+assert os.environ.get('MAPBOX_TOKEN') is not None, 'empty token'
 px.set_mapbox_access_token(os.environ.get('MAPBOX_TOKEN'))
 
-# Load route and stations info through queries to database
 geo_info_query = dedent(
     """
     SELECT
@@ -53,39 +70,61 @@ geo_route_query = dedent(
 )
 geo_route = connect_and_query(geo_route_query)
 
+amtrak_stations = list(geo_info['STNCODE'])
+location_names = list(geo_info['STNNAME'])
+
+######################
+# STYLING
+######################
+OPTION_LABEL_STYLE_WITH_DOWN_MARGIN = {'font-size': 15, 'margin-bottom': '2.5%'}
+OPTION_LABEL_STYLE_WITH_UP_DOWN_MARGIN = {'font-size': 15, 'margin-bottom': '2.5%', 'margin-top': '2.5%'}
+OPTION_VIEWABLE_FALSE = {'font-size': 15, 'display': 'none'}
+OPTION_STYLE = {'font-size': 14, 'padding-left': '5%'}
+OPTION_LABEL_STYLE = {'font-size': 15}
+
+VIEWABLE_CARD_STYLE = {'display': 'block'}
+HIDDEN_CARD_STYLE = {'display': 'none', 'padding-top': '5%'}
+ERROR_CARD_LABEL_STYLE = {'font-size': 15, 'display': 'block', 'color': 'red'}
+BUTTON_STYLE = {'font-size': 15, 'margin-top': '2.5%'}
+
+
+FIGURE_STYLE = {'height': 550, 'width': 950}
+MAPBOX_STYLE = 'mapbox://styles/elizabethchen/ckpwqldby4ta317nj9xfc1eeu'
+CONTRAST_COLOR = 'navy'
+MARKER_STYLE = {'size': 6, 'color': CONTRAST_COLOR}
+PATH_STYLE = {'width': 3.5}
+ZOOM_LEVEL = 6.0
+FIGURE_LAYOUT_STYLE = dict(paper_bgcolor='white', plot_bgcolor='white', margin=dict(t=35, l=80, b=0, r=0))
+
+
+######################
+# VISUALIZATION PAGE 
+######################
+
+
 default_query = dedent(
             """
             SELECT
-                t.direction AS "Direction",
-                t.station_code AS "Station",
-                t.sb_mile,
-                t.arrival_or_departure AS "Arrival or Departure",
-                CAST(AVG(t.timedelta_from_sched) AS INTEGER) AS "Average Delay",
+                direction AS "Direction",
+                station_code AS "Station",
+                sb_stop_num AS "Stop Number",
+                arrival_or_departure AS "Arrival or Departure",
+                CAST(AVG(timedelta_from_sched) AS INTEGER) AS "Average Delay",
                 COUNT(*) AS "Num Records"
             FROM
-                stops_joined t
+                stops_joined
             WHERE
-                t.direction = 'Southbound' AND
-                t.sched_arr_dep_week_day IN
-                    ('Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday')
-            GROUP BY t.station_code, t.direction, t.sb_mile, t.arrival_or_departure
-            ORDER BY t.sb_mile ASC;
+                direction = 'Southbound' AND
+                sched_arr_dep_week_day IN
+                    ('Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday') 
+            GROUP BY station_code, direction, sb_stop_num, arrival_or_departure
+            ORDER BY sb_stop_num ASC;
             """
 )
+
 default_query_df = connect_and_query(default_query)
-colors_dict, delays, color_group_key = get_colors(geo_route, default_query_df)
+colors_dict, delays, counts, color_group_key = get_colors(geo_route, default_query_df)
 
-# Info for map
-amtrak_stations = list(geo_info['STNCODE'])
-location_names = list(geo_info['STNNAME'])
-#map_style = 'mapbox://styles/elizabethchen/ckpwoy47551i018mntxuxsge1'
-#contrast_color = '#EDEDED'
-#map_style = 'mapbox://styles/elizabethchen/ckpwpfj0v1xak17mwoyasccsm'
-#map_style = 'light'
-#contrast_color = 'black'
-
-map_style = 'mapbox://styles/elizabethchen/ckpwqldby4ta317nj9xfc1eeu'
-contrast_color = 'navy'
 # Route Visualization with Stand-in Color Coded Groups
 route = px.line_mapbox(geo_route,
                        lat=geo_route['Latitude'],
@@ -94,54 +133,69 @@ route = px.line_mapbox(geo_route,
                        color=geo_route[color_group_key],
                        color_discrete_map=colors_dict,
                        hover_data={color_group_key: False, 'Group': False},
-                       mapbox_style=map_style,
-                       zoom=6.15)
-#route.update_mapboxes(style=)
+                       mapbox_style=MAPBOX_STYLE,
+                       zoom=ZOOM_LEVEL)
+
 route.update_traces(line=dict(width=3))
 
-route.add_trace(go.Scattermapbox(lat=geo_info['LAT'].round(decimals=5),
-                                 lon=geo_info['LON'].round(decimals=5),
-                                 name='Amtrak Stations',
-                                 hoverinfo='text',
-                                 customdata=delays,
-                                 hovertext=geo_info['STNNAME'],
-                                 hovertemplate="%{hovertext} (Avg. Delay: %{customdata} mins)<extra></extra>",
-                                 mode='markers',
-                                 marker={'size': 6, 'color': contrast_color},
-                                 fill='none'
-                                 )
-                )
-route.update_layout(
-    dict(paper_bgcolor="white", plot_bgcolor="white",
-         margin=dict(t=35, l=80, b=0, r=0)))
+route.add_trace(
+    go.Scattermapbox(
+        lat=geo_info['LAT'].round(decimals=5),
+        lon=geo_info['LON'].round(decimals=5),
+        name='Amtrak Stations',
+        hoverinfo='text',
+        customdata=np.stack([delays, counts], axis=-1),
+        hovertext=np.stack([geo_info['STNNAME'], geo_info['STNCODE']], axis=-1),
+        hovertemplate="""
+                    %{hovertext[0]} (%{hovertext[1]}) <br>
+                    Avg. Delay: %{customdata[0]} mins
+                    (<i>n</i> = %{customdata[1]})<extra></extra>""",
+        mode='markers',
+        marker=MARKER_STYLE,
+        fill='none'
+    )
+)
+route.update_layout(FIGURE_LAYOUT_STYLE)
 
 route.update_yaxes(automargin=True)
 
 config = dict({'scrollZoom': False})
 
-# Components of homepage layout
-
-div_alert = html.Div(id="alert-msg")
-
+div_alert = html.Div(
+    dbc.Alert(
+        "Showing results from default selection.",
+        color="info", 
+        dismissable=True
+    ), 
+    id="alert-msg"
+)
 controls = dbc.Card(
     [
+        html.H6(html.B("Query Settings")),
+        html.P(
+            html.B(
+                "Changing the options below will modify the data selected for plotting.",
+                style={'font-size': 14}
+            )
+        ),
         dbc.FormGroup(
             [
-                dbc.Label('Choose a direction for travel', style={'font-size': 15}),
+                dbc.Label('Choose a direction for travel', style=OPTION_LABEL_STYLE),
                 dcc.RadioItems(
                     id='direction-selector',
                     options=[{'label': 'Northbound', 'value': "\'Northbound\'"},
                              {'label': 'Southbound', 'value': "\'Southbound\'"}],
                     value="\'Southbound\'",
                     inputStyle={"margin-right": "10px"},
-                    style={'font-size': 14, 'padding-left': '5%'},
-                    persistence=True
+                    style=OPTION_STYLE,
+                    persistence=True,
+                    persistence_type='session'
                 ),
             ]
         ),
         dbc.FormGroup(
             [
-                dbc.Label('Select one or more days of the week to include', style={'font-size': 15}),
+                dbc.Label('Select one or more days of the week to include', style=OPTION_LABEL_STYLE),
                 dcc.Checklist(
                     id='days-of-week-checkboxes',
                     options=[
@@ -155,165 +209,37 @@ controls = dbc.Card(
                     ],
                     value=[0, 1, 2, 3, 4, 5, 6],
                     inputStyle={"margin-right": "10px"},
-                    style={'font-size': 14, 'padding-left': '5%'},
-                    persistence=True
+                    style=OPTION_STYLE,
                 )
             ]
         ),
         dbc.FormGroup(
             [
-                dbc.Label('Allow data with known Service Disruptions?', style={'font-size': 15}),
-                dcc.RadioItems(
-                    id='sd-selector',
+                dbc.Label('Select one or more precipitation conditions to include', style=OPTION_LABEL_STYLE),
+                dcc.Checklist(
+                    id='weather-type',
                     options=[
-                        {'label': 'Yes', 'value': "\'0\' OR t.service_disruption = \'1\'"},
-                        {'label': 'No', 'value': "\'0\'"}],
-                    value="\'0\'",
-                    inputStyle={"margin-right": "10px"},
-                    style={'font-size': 14, 'padding-left': '5%'},
-                    persistence=True
-                )
-            ]
-        ),
-
-        dbc.FormGroup(
-            [
-                dbc.Label('Allow data with known Cancellations?', style={'font-size': 15}),
-                dcc.RadioItems(
-                    id='cancellation-selector',
-                    options=[
-                        {'label': 'Yes', 'value': "\'0\' OR t.cancellations = \'1\'"},
-                        {'label': 'No', 'value': "\'0\'"}
+                            {'label': 'No Precipitation', 'value': 'None'},
+                            {'label': 'Rain', 'value': 'Rain'},
+                            {'label': 'Snow', 'value': 'Snow'},
+                            {'label': 'Other', 'value': 'Other'}
                     ],
-                    value="\'0\'",
+                    value=['None', 'Rain', 'Snow', 'Other'],
                     inputStyle={"margin-right": "10px"},
-                    style={'font-size': 14, 'padding-left': '5%'},
-                    persistence=True
+                    style=OPTION_STYLE
                 )
             ]
         ),
-        dbc.FormGroup(
-            [
-                dbc.Label('Select one of the following options to further filter the data', style={'font-size': 15}),
-                dcc.RadioItems(
-                    id='filter-type-selector',
-                    options=[{'label': 'Extreme Temperatures', 'value': "extreme-temp"},
-                             {'label': 'Season', 'value': "seasons"},
-                             {'label': 'Cloud Coverage', 'value': "cloud-cover"},
-                             {'label': 'Precipitation by Type', 'value': "precip-by-type"},
-                             {'label': 'Precipitation by Amount', 'value': "precip-by-amount"}
-                             ],
-                    value="extreme-temp",
-                    inputStyle={"margin-right": "10px"},
-                    style={'font-size': 14, 'padding-left': '5%'},
-                    persistence=True
-                )
-            ]
-        ),
-        dbc.Button(
-            'View Filtering Options',
-            color='primary',
-            id='set-filter-mode',
-            style={'font-size': 15}
-        ),
-        dbc.FormGroup(id='chosen-option-formgroup'),
         dbc.Button(
             "Submit Query and Plot Results",
-            id="send-query-button",        
+            id="send-query-button",
             color="primary",
-            style={'font-size': 15, 'margin-top': '2.5%'},
-            disabled=True
+            style=BUTTON_STYLE
         )
     ],
     id="controls",
     body=True
 )
-
-temp_checkboxes = [
-    dbc.Label('Select temperature conditions', style={'font-size': 15, 'padding-top': '2.5%'}),
-    dcc.Checklist(
-        id='chosen-option',
-        options=[
-                {'label': 'Extreme Cold (temperature < 32\u00B0)', 'value': 'cold'},
-                {'label': 'Extreme Heat (temperature > 90\u00B0)', 'value': 'hot'},
-                {'label': 'Moderate Range (32\u00B0 ≤ temperature ≤90\u00B0) ', 'value': 'between'}
-        ],
-        value=['hot'],
-        inputStyle={"margin-right": "10px"},
-        style={'font-size': 14, 'padding-left': '5%', 'margin-bottom': '-15px'},
-        persistence=True
-    )
-]
-
-        
-cloud_cover_checkboxes = [
-    dbc.Label('Select one or more levels of cloudiness', style={'font-size': 15, 'padding-top': '2.5%'}),
-    dcc.Checklist(
-        id='chosen-option',
-        options=[
-            {'label': 'Clear', 'value': 'clear'},
-            {'label': 'Mostly Sunny to Partly Cloudy', 'value': 'partly cloudy'},
-            {'label': 'Partly Sunny to Mostly Cloudy', 'value': 'mostly cloudy'},
-            {'label': 'Overcast', 'value': 'overcast'}
-        ],
-        value=['clear'],
-        inputStyle={"margin-right": "10px"},
-        style={'font-size': 14, 'padding-left': '5%', 'margin-bottom': '-15px'},
-        persistence=True
-    )
-]
-
-precip_by_type = [
-    dbc.Label('Select one or more precipitation conditions to include', style={'font-size': 15, 'padding-top': '2.5%'}),
-    dcc.Checklist(
-        id='chosen-option',
-        options=[
-                {'label': 'No Precipitation', 'value': 'none'},
-                {'label': 'Rain', 'value': 'rain'},
-                {'label': 'Snow', 'value': 'snow'},
-                {'label': 'Other', 'value': 'other'}
-        ],
-        value=['rain', 'snow'],
-        inputStyle={"margin-right": "10px"},
-        style={'font-size': 14, 'padding-left': '5%', 'margin-bottom': '-15px'},
-        persistence=True
-    )
-]
-
-precip_by_amount = [
-    dbc.Label('Select a range of precipitation levels (rain, snow, and other precipitation included)', style={'font-size': 15, 'padding-top': '2.5%'}),
-    dcc.RangeSlider(
-        id='chosen-option',
-        min=0,
-        max=3,
-        step=None,
-        marks={
-            0: 'None',
-            1: 'Light',
-            2: 'Moderate',
-            3: 'Heavy'
-        },
-        value=[0,1],
-        persistence=True
-    )
-]
-
-seasons = [
-    dbc.Label('Select one or more seasons to include', style={'font-size': 15, 'padding-top': '2.5%'}),
-    dcc.Checklist(
-        id='chosen-option',
-        options=[
-                {'label': 'Fall', 'value': 3},
-                {'label': 'Winter', 'value': 0},
-                {'label': 'Spring', 'value': 1},
-                {'label': 'Summer', 'value': 2}
-            ],
-        value=[0,1,2,3],
-        inputStyle={"margin-right": "10px"},
-        style={'font-size': 14, 'padding-left': '5%', 'margin-bottom': '-15px'},
-        persistence=True
-    )
-]
 
 viz = dbc.Card(
     [
@@ -321,16 +247,341 @@ viz = dbc.Card(
             id='geo-route',
             config=config,
             figure=route,
-            style=dict(height=550, width=1000))
+            style=FIGURE_STYLE
+        )
     ],
     body=True
 )
 
-app.layout = dbc.Container(
+
+@app.callback(
     [
-        html.H2("Amtrak Northeast Regional On-Time Performance Explorer"),
-        html.H5("A DATA 1050 Final Project by Elizabeth C. Chen", style={'padding-top': '-10px', 'padding-bottom': '-10px'}),
-        html.Hr(),
+        Output("alert-msg", "children"),
+        Output("geo-route", "figure")
+    ],
+    [
+        Input("send-query-button", 'n_clicks')
+    ],
+    [
+        State('direction-selector', 'value'),
+        State('days-of-week-checkboxes', 'value'),
+        State('weather-type', 'value')
+    ]
+)
+def generate_query(n_clicks, direction, days, weather_type):
+    if n_clicks is None:
+        raise dash.exceptions.PreventUpdate
+    else:
+        selected_days = get_days(days)
+        weather_type = get_precip_types(weather_type)
+        sort_stop_num = get_sort_from_direction(direction)
+        query = dedent(
+            f"""
+            SELECT
+                direction AS "Direction",
+                station_code AS "Station",
+                {sort_stop_num} AS "Stop Number",
+                arrival_or_departure AS "Arrival or Departure",
+                CAST(AVG(timedelta_from_sched) AS INTEGER) AS "Average Delay",
+                COUNT(*) AS "Num Records"
+            FROM
+                stops_joined
+            WHERE
+                direction = {direction} AND
+                sched_arr_dep_week_day IN {selected_days} AND
+                precip_type IN {weather_type}
+            GROUP BY station_code, direction, {sort_stop_num}, arrival_or_departure
+            ORDER BY {sort_stop_num} ASC;
+            """
+        )
+        print(query)
+        try:
+            t0 = time.time()
+            query_df = connect_and_query(query)
+            print(query_df)
+            assert query_df.shape[0] > 0
+        except AssertionError:
+            raise dash.exceptions.PreventUpdate
+
+        colors, delays, counts, color_group_key = get_colors(geo_route, query_df)
+        route = px.line_mapbox(
+            geo_route,
+            lat=geo_route['Latitude'],
+            lon=geo_route['Longitude'],
+            line_group=geo_route['Connecting Path'],
+            color=geo_route[color_group_key],
+            color_discrete_map=colors,
+            hover_data={color_group_key: False, 'Group': False},
+            mapbox_style=MAPBOX_STYLE,
+            zoom=ZOOM_LEVEL)
+        route.update_traces(line=dict(width=3))
+        route.add_trace(go.Scattermapbox(
+            lat=geo_info.LAT.round(decimals=5),
+            lon=geo_info.LON.round(decimals=5),
+            name='Amtrak Stations',
+            hoverinfo='text',
+            customdata=np.stack([delays, counts], axis=-1),
+            hovertext=np.stack([geo_info['STNNAME'], geo_info['STNCODE']], axis=-1),
+            hovertemplate="""
+                        %{hovertext[0]} (%{hovertext[1]}) <br>
+                        Avg. Delay: %{customdata[0]} mins
+                        (<i>n</i> = %{customdata[1]})<extra></extra>""",
+            mode='markers',
+            marker=MARKER_STYLE,
+            fill='none'
+            )
+        )
+        route.update_layout(FIGURE_LAYOUT_STYLE)
+        route.update_yaxes(automargin=True)
+        t1 = time.time()
+        exec_time = t1 - t0
+        query_size = int(counts.sum())
+        alert_msg = f"Queried {query_size} records. Total time: {exec_time:.2f}s."
+        alert = dbc.Alert(alert_msg, color="success", dismissable=True)
+    return alert, route
+
+
+######################
+# ENHANCEMENT PAGE
+######################
+specific_trip_controls = dbc.Card(
+    [
+        html.H6(html.B("Query Settings")),
+        html.P(
+            html.B(
+                "Start by selecting date from the calendar below.",
+                style={'font-size': 14}
+            )
+        ),
+        dbc.Label("1. Select a date to view past train trips.", style=OPTION_LABEL_STYLE_WITH_DOWN_MARGIN),
+        dcc.DatePickerSingle(
+            id="single-trip-date-picker",
+            display_format="MMMM Do, YYYY",
+            min_date_allowed=date(2011, 1, 1),
+            max_date_allowed=date.today()-timedelta(days=1),
+            initial_visible_month=date.today(),
+            placeholder="Select a date",
+            with_full_screen_portal=True,
+            persistence=True
+        ),
+        html.Div(
+            [
+                dbc.Label("2. Select a train trip from the selected date.", id="step-2-label", style=OPTION_LABEL_STYLE_WITH_UP_DOWN_MARGIN),
+                dcc.Dropdown(
+                    disabled=False,
+                    id='train-num-picker',
+                    searchable=True,
+                    clearable=False,
+                    placeholder="Select a train number"
+                )
+            ],
+            id='step-2-container',
+            style=HIDDEN_CARD_STYLE
+        ),
+        html.Div(
+            [
+                dbc.Label(
+                    "3. Select a range of years to compare this trip with historical data.",
+                    id="step-3-label", style=OPTION_LABEL_STYLE_WITH_UP_DOWN_MARGIN),
+                dcc.RangeSlider(
+                    min=2011,
+                    max=2021,
+                    value=[2011, 2019],
+                    marks={
+                        year: {'label': str(year)} for year in range(2011, 2022)
+                    },
+                    id="historical-range-slider"
+                )
+            ],
+            id='step-3-container',
+            style=HIDDEN_CARD_STYLE
+        ),
+        dbc.Button(
+            "Submit Query and View Results",
+            id="enhancement-send-query-button",        
+            color="primary",
+            style=BUTTON_STYLE,
+            disabled=True
+        )
+    ],
+    body=True
+)
+hypo_test_view_initial = dbc.Card(
+    [
+        html.P("Select a date and train to compare with its historical averages.")
+    ],
+    id="enhancement-view"
+)
+
+#hypo_test_view = dbc.Card(
+#[]
+#)
+
+
+@app.callback(
+    [
+        Output("step-2-container", "style"),
+        Output("train-num-picker", "options")
+    ],
+    [
+        Input("single-trip-date-picker", "date")
+    ]
+)
+def show_step2(date_value):
+    if date_value is not None:
+        avail_trains_query = f"""
+                              SELECT DISTINCT train_num 
+                              FROM stops_joined 
+                              WHERE sched_arr_dep_date = '{date_value}'"""
+        result = connect_and_query(avail_trains_query)
+        if result.shape[0] > 0:
+            step2_style = VIEWABLE_CARD_STYLE
+            train_num_options = [
+                {'label': train_num, 'value': train_num} for train_num in result['train_num']
+            ]
+            return step2_style, train_num_options
+        else:
+            raise dash.exceptions.PreventUpdate
+    else:
+        raise dash.exceptions.PreventUpdate
+        
+
+@app.callback(
+    [
+        Output("step-3-container", "style"),
+        Output("enhancement-send-query-button", "disabled")
+    ],
+    [
+        Input("train-num-picker", "value")
+    ]
+)
+def show_step3(train_num_selected):
+    if train_num_selected is not None:
+        step3_style = VIEWABLE_CARD_STYLE
+        button_disabled = False
+        return step3_style, button_disabled
+    else:
+        raise dash.exceptions.PreventUpdate
+    
+
+
+@app.callback(
+    Output("enhancement-view", "children"),
+    [
+        Input("enhancement-send-query-button", "n_clicks")
+    ],
+    [
+        State("single-trip-date-picker", "date"),
+        State("train-num-picker", "value"),
+        State("historical-range-slider", "value")
+    ]
+)
+def enable_send_query(n_clicks, selected_date, train_num, year_range):
+    if n_clicks is not None:
+        sort_stop_num = get_sort_from_train_num(train_num)
+        single_trip_query = f"""
+                             SELECT
+                                direction AS "Direction",
+                                station_code AS "Station",
+                                {sort_stop_num} AS "Stop Number",
+                                service_disruption AS "Service Disruption",
+                                cancellations AS "Cancellations",
+                                arrival_or_departure AS "Arrival or Departure",
+                                CAST(timedelta_from_sched AS integer) AS "Delay"
+                             FROM
+                                 stops_joined
+                             WHERE
+                                 origin_date = '{selected_date}' AND
+                                 train_num = '{train_num}'
+                             ORDER BY {sort_stop_num} ASC, arrival_or_departure ASC;
+                             """
+     #  sd_occurred = single_trip_query["Service Disruption"].astype(int)
+    #    print(sd_occurred)
+        historical_query = f"""
+                            SELECT
+                                station_code AS "Station",
+                                {sort_stop_num} AS "Stop Number",
+                                arrival_or_departure AS "Arrival or Departure",
+                                CAST(AVG(timedelta_from_sched) AS integer) AS "Average Delay",
+                                STDDEV_POP(timedelta_from_sched) AS "Standard Deviation"
+                            FROM
+                                stops_joined
+                            WHERE
+                                train_num = '{train_num}' AND
+                                origin_year BETWEEN {year_range[0]} AND {year_range[1]}
+                            GROUP BY station_code, {sort_stop_num}, arrival_or_departure
+                            ORDER BY {sort_stop_num} ASC, arrival_or_departure ASC;
+                            """
+        single_trip_df = connect_and_query(single_trip_query)
+        historical_df = connect_and_query(historical_query)
+        print(single_trip_df)
+        print(historical_df)
+    else:
+        raise dash.exceptions.PreventUpdate
+
+
+######################
+# NAVIGATION
+######################
+nav = dbc.Nav(
+    [
+        dbc.NavItem(dbc.NavLink("About the Project", active="exact", href="/data1050-app-home")),
+        dbc.NavItem(dbc.NavLink("On-Time Performance Visualizer", active="exact", href="/data1050-app-viz")),
+        dbc.NavItem(dbc.NavLink("On-Time Performance Comparison", active="exact", href="/data1050-app-enhancement")),
+        dbc.DropdownMenu(
+            [
+                dbc.DropdownMenuItem("Github Repository", href="https://github.com/elizabeth-c-chen/data1050-amtrak-on-time-analysis", id="button-link"),
+                dbc.DropdownMenuItem("View Data Retrieval & Database Loading Notebook", href="https://nbviewer.jupyter.org/github/elizabeth-c-chen/data1050-amtrak-on-time-analysis/blob/master/EDA_ETL.ipynb", id="button-link")
+            ],
+            label="View Source Code",
+            nav=True
+        ),
+    ],
+    pills=True,
+    horizontal='center',
+    card=True
+)
+
+
+######################
+# PAGE LAYOUTS
+######################
+SHOW_THIS_PAGE_ON_LOAD = "/data1050-app-viz"
+unfinished = html.P("This page is coming soon!", style={'text-align': 'center', 'font-size': 50})
+
+
+data1050_app_home_layout = dbc.Container(
+    [
+        html.H3(html.A(children="Portfolio of Elizabeth C. Chen", href='/')),
+        html.H4(html.A("Amtrak Northeast Regional On-Time Performance Explorer", href=SHOW_THIS_PAGE_ON_LOAD)),
+        html.H6("A DATA 1050 Final Project", style={'padding-top': '-10px', 'padding-bottom': '-10px'}),
+        nav,
+        dbc.Row(
+            [
+                dbc.Col(unfinished, md=12, lg=12)
+            ],
+            no_gutters=False
+        ),
+        dbc.Row(
+            [
+                html.P(
+                    children="You are visiting the portfolio of Elizabeth C. Chen, Master's \
+                        student at Brown University. This webpage is not affiliated with \
+                        Amtrak in any way.",
+                    style={'font-size': 12, 'display': 'block', 'padding-top': '3%', 'margin-left': 'auto', 'margin-right': 'auto'}
+                )
+            ]
+        )
+    ],
+    fluid=True
+)
+
+data1050_app_viz_layout = dbc.Container(
+    [
+        html.H3(html.A(children="Portfolio of Elizabeth C. Chen", href='/')),
+        html.H4(html.A("Amtrak Northeast Regional On-Time Performance Explorer", href='/data1050-app-home')),
+        html.H6("A DATA 1050 Final Project", style={'padding-top': '-10px', 'padding-bottom': '-10px'}),
+        nav,
         dbc.Row(
             [
                 dbc.Col([controls, div_alert], md=4, lg=3.25),
@@ -352,147 +603,57 @@ app.layout = dbc.Container(
     fluid=True
 )
 
-submit_callback_states_list = get_submit_callback_states_list()
-
-@app.callback(
+data1050_app_enhancement_layout = dbc.Container(
     [
-        Output("chosen-option-formgroup", "children"), 
-        Output("send-query-button", "disabled")
-    ],
-    [
-        Input("set-filter-mode", "n_clicks")
-    ],
-    [
-        State("filter-type-selector", "value")
-    ]
-)
-def update_options(n_clicks, option_val):
-    if n_clicks is None:
-        submit_callback_states_list = set_submit_callback_states_list(n_clicks)
-        raise dash.exceptions.PreventUpdate
-    else: 
-        submit_callback_states_list = set_submit_callback_states_list(n_clicks)
-        if option_val == "extreme-temp":
-            choice = temp_checkboxes
-        elif option_val == "seasons":
-            choice = seasons
-        elif option_val == "cloud-cover":
-            choice = cloud_cover_checkboxes
-        elif option_val == "precip-by-type":
-            choice = precip_by_type
-        elif option_val == "precip-by-amount":
-            choice = precip_by_amount
-        return choice, False
-
-default_options = ['snow', 'rain', 'none', 'other']
-
-@app.callback(
-    [
-        Output("alert-msg", "children"),
-        Output("geo-route", "figure")
-    ],
-    [
-        Input("send-query-button", 'n_clicks')
-    ],
-    submit_callback_states_list
-)
-
-def generate_query(n_clicks, direction, days, sd_choice, cancel_choice, option=default_options):
-    if n_clicks is None:
-        raise dash.exceptions.PreventUpdate
-    else:
-        selected_days = get_days(days)
-        if option != default_options:
-            filter_query_string = get_query_string(option)
-            query = dedent(
-                f"""
-                SELECT
-                    t.direction AS "Direction",
-                    t.station_code AS "Station",
-                    t.sb_mile,
-                    t.arrival_or_departure AS "Arrival or Departure",
-                    CAST(AVG(t.timedelta_from_sched) AS INTEGER) AS "Average Delay",
-                    COUNT(*) AS "Num Records"
-                FROM
-                    stops_joined t
-                WHERE
-                    t.direction = {direction} AND
-                    t.sched_arr_dep_week_day IN {selected_days} AND
-                    t.service_disruption = {sd_choice} AND
-                    t.cancellations = {cancel_choice} 
-                """ + "AND " + filter_query_string + 
-                """
-                GROUP BY t.station_code, t.direction, t.sb_mile, t.arrival_or_departure
-                ORDER BY t.sb_mile ASC;
-                """
-            )
-        else:
-            query = dedent(
-                f"""
-                SELECT
-                    t.direction AS "Direction",
-                    t.station_code AS "Station",
-                    t.sb_mile,
-                    t.arrival_or_departure AS "Arrival or Departure",
-                    CAST(AVG(t.timedelta_from_sched) AS INTEGER) AS "Average Delay",
-                    COUNT(*) AS "Num Records"
-                FROM
-                    stops_joined t
-                WHERE
-                    t.direction = {direction} AND
-                    t.sched_arr_dep_week_day IN {selected_days} AND
-                    t.service_disruption = {sd_choice} AND
-                    t.cancellations = {cancel_choice} 
-                GROUP BY t.station_code, t.direction, t.sb_mile, t.arrival_or_departure
-                ORDER BY t.sb_mile ASC;
-                """
-            )
-        print(query)
-        try:
-            t0 = time.time()
-            query_df = connect_and_query(query)
-            assert query_df.shape[0] > 10
-        except AssertionError:
-            raise dash.exceptions.PreventUpdate
-
-        colors, delays, color_group_key = get_colors(geo_route, query_df)
-        route = px.line_mapbox(
-            geo_route,
-            lat=geo_route['Latitude'],
-            lon=geo_route['Longitude'],
-            line_group=geo_route['Connecting Path'],
-            color=geo_route[color_group_key],
-            color_discrete_map=colors,
-            hover_data={color_group_key: False, 'Group': False},
-            mapbox_style=map_style,
-            zoom=6.15)
-        route.update_traces(line=dict(width=3))
-        route.add_trace(go.Scattermapbox(
-            lat=geo_info.LAT.round(decimals=5),
-            lon=geo_info.LON.round(decimals=5),
-            name='Amtrak Stations',
-            hoverinfo='text',
-            customdata=delays,
-            hovertext=geo_info['STNNAME'],
-            hovertemplate="%{hovertext} (Avg. Delay: %{customdata} mins)<extra></extra>",
-            mode='markers',
-            marker={'size': 6, 'color': contrast_color},
-            fill='none'
-            )
+        html.H3(html.A(children="Portfolio of Elizabeth C. Chen", href='/')),
+        html.H4(html.A("Amtrak Northeast Regional On-Time Performance Explorer", href='/data1050-app-analysis')),
+        html.H6("A DATA 1050 Final Project", style={'padding-top': '-10px', 'padding-bottom': '-10px'}),
+        nav,
+        dbc.Row(
+            [
+                dbc.Col([specific_trip_controls], md=5, lg=4),
+                dbc.Col(hypo_test_view_initial, md=7, lg=8)
+            ],
+            no_gutters=False
+        ),
+        dbc.Row(
+            [
+                html.P(
+                    children="You are visiting the portfolio of Elizabeth C. Chen, Master's \
+                        student at Brown University. This webpage is not affiliated with \
+                        Amtrak in any way.",
+                    style={'font-size': 12, 'display': 'block', 'padding-top': '3%', 'margin-left': 'auto', 'margin-right': 'auto'}
+                )
+            ]
         )
-        route.update_layout(
-            dict(
-                paper_bgcolor="white",
-                plot_bgcolor="white",
-                margin=dict(t=35, l=80, b=0, r=0)))
-        route.update_yaxes(automargin=True)
-        t1 = time.time()
-        exec_time = t1 - t0
-        query_size = query_df["Num Records"].sum()
-        alert_msg = f"Queried {query_size} records. Total time: {exec_time:.2f}s."
-        alert = dbc.Alert(alert_msg, color="success", dismissable=True)
-    return alert, route
+    ],
+    fluid=True
+)
+
+error_page_layout = html.Div(
+    children=[
+        html.H3(children="Uh oh! You have reached a page that doesn't exist"),
+        html.H6(html.A(children='Click here to return to the homepage.', href='/'))
+    ],
+    style={'display': 'block', 'margin-left': 'auto', 'margin-right': 'auto'}
+)
+
+@app.callback(
+    dash.dependencies.Output('page-content', 'children'),
+    [dash.dependencies.Input('url', 'pathname')]
+)
+def display_page(pathname):
+    if pathname == '/':
+        return data1050_app_home_layout
+    elif pathname == '/data1050-app-home':
+        return data1050_app_home_layout
+    elif pathname == '/data1050-app-viz':
+        return data1050_app_viz_layout
+    elif pathname == '/data1050-app-enhancement':
+        return data1050_app_enhancement_layout
+    else:
+        return error_page_layout
 
 
 if __name__ == '__main__':
-    app.run_server(debug=True)
+    app.run_server(port=8051, debug=True)

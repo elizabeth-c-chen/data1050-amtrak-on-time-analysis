@@ -6,12 +6,6 @@ import pandas as pd
 import numpy as np
 from datetime import date, timedelta
 
-# CURRENT STATUS:
-#       * minimal error checking
-# TO DO:
-#       * implement necessary error checking
-
-
 def make_dict():
     """
     Creates dictionary to hold raw data sorted by arrival and direction, then by station.
@@ -23,7 +17,6 @@ def make_dict():
                                              'EWR', 'MET', 'TRE', 'PHL', 'WIL', 
                                              'ABE', 'BAL', 'BWI', 'NCR', 'WAS']}}
     return dictionary
-
 
 
 def convert_train_nums_to_string(train_nums_list):
