@@ -2,11 +2,26 @@ import pandas as pd
 import psycopg2
 import os
 import plotly
+import sys
+import logging
 
 assert os.environ.get('DATABASE_URL') is not None, 'database URL is not set!'
 
 
-# Helper Functions
+# Logging setup for errors/warnings/issues
+def setup_logger(logger, output_file):
+    logger.setLevel(logging.INFO)
+
+    stdout_handler = logging.StreamHandler(sys.stdout)
+    stdout_handler.setFormatter(logging.Formatter('%(asctime)s [%(funcName)s]: %(message)s'))
+    logger.addHandler(stdout_handler)
+
+    file_handler = logging.FileHandler(output_file)
+    file_handler.setFormatter(logging.Formatter('%(asctime)s [%(funcName)s] %(message)s'))
+    logger.addHandler(file_handler)
+
+
+# Helper Functions for app.py
 def connect_and_query(query):
     conn = psycopg2.connect(os.environ.get('DATABASE_URL'), sslmode='require')
     query_data = pd.read_sql(query, conn)

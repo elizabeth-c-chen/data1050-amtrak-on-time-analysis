@@ -5,10 +5,11 @@ from datetime import date, timedelta, datetime
 
 import numpy as np
 import pandas as pd
-import dash
+from dash import Dash
 import dash_core_components as dcc
 import dash_bootstrap_components as dbc
 import dash_html_components as html
+import dash.exceptions
 from dash.dependencies import Input, Output, State
 from dash_table import DataTable
 import plotly.express as px
@@ -25,7 +26,7 @@ assert os.environ.get('DATABASE_URL') is not None, 'database URL is not set!'
 ######################
 # DASH SETUP
 ######################
-app = dash.Dash(
+app = Dash(
     __name__,
     suppress_callback_exceptions=True,
     update_title=None
@@ -502,19 +503,19 @@ def show_step2(date_value):
         avail_trains_query = dedent(
             f"""
              SELECT DISTINCT
-                CAST(train_num AS INTEGER)
+                CAST(train_num AS INTEGER) AS "Train Number"
              FROM
                 stops_joined
              WHERE
                 origin_date = '{date_value}'
              ORDER BY
-                train_num ASC;
+                "Train Number" ASC;
             """
         )
         result = connect_and_query(avail_trains_query)
         if result.shape[0] > 0:
             train_num_options = [
-                {'label': train_num, 'value': train_num} for train_num in result['train_num']
+                {'label': train_num, 'value': train_num} for train_num in result['Train Number']
             ]
             return train_num_options
         else:
@@ -584,7 +585,7 @@ def enable_send_query(active_tab, n_clicks, selected_date, train_num, year_range
                     station_code AS "Station",
                     {sort_stop_num} AS "Stop Number",
                     arrival_or_departure AS "Arrival or Departure",
-                    CAST(AVG(timedelta_from_sched) AS INTEGER) AS "Avg. Mins from Scheduled",
+                    ROUND(AVG(timedelta_from_sched), 1) AS "Avg. Mins from Scheduled",
                     ROUND(STDDEV_POP(timedelta_from_sched), 1) AS "Standard Deviation",
                     COUNT(*) AS "Num Records Averaged"
                 FROM
@@ -604,7 +605,10 @@ def enable_send_query(active_tab, n_clicks, selected_date, train_num, year_range
                     html.H6("An error occurred for this specific trip; please try another one!")
                 ]
                 alert = dbc.Alert(
-                    f"An error occurred for Train {train_num} on {selected_date}. ",
+                    f"""
+                    An error occurred for Train {train_num} on {selected_date}. (Hint: \
+                        You moved so quickly that the database could not catch up with you in time!)
+                    """,
                     color="warning",
                     dismissable=True
                 )
@@ -996,8 +1000,8 @@ error_page_layout = html.Div(
 
 
 @app.callback(
-    dash.dependencies.Output('page-content', 'children'),
-    [dash.dependencies.Input('url', 'pathname')]
+    Output('page-content', 'children'),
+    [Input('url', 'pathname')]
 )
 def display_page(pathname):
     if pathname == '/':
@@ -1014,8 +1018,5 @@ def display_page(pathname):
         return error_page_layout
 
 
-if datetime.now().strftime("%H:%M:%S") == "02:02:00":
-    print("its 2:02am!")
-
 if __name__ == '__main__':
-    app.run_server(port=8052, debug=False)
+    app.run_server(port=8052, debug=True)

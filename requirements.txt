@@ -12,3 +12,5 @@ requests
 psycopg2
 ipython-sql
 gunicorn
+sqlalchemy
+APScheduler
