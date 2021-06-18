@@ -840,7 +840,7 @@ data1050_app_details_layout = dbc.Container(
         html.H4(
             html.A(
                 "Amtrak Northeast Regional On-Time Performance Explorer",
-                href='/data1050-app-details'
+                href=SHOW_THIS_PAGE_ON_LOAD
             )
         ),
         html.H6(
@@ -886,7 +886,7 @@ data1050_app_viz_layout = dbc.Container(
         html.H4(
             html.A(
                 "Amtrak Northeast Regional On-Time Performance Explorer",
-                href='/data1050-app-details'
+                href=SHOW_THIS_PAGE_ON_LOAD
             )
         ),
         html.H6(
@@ -933,7 +933,7 @@ data1050_app_enhancement_layout = dbc.Container(
         html.H4(
             html.A(
                 "Amtrak Northeast Regional On-Time Performance Explorer",
-                href='/data1050-app-details'
+                href=SHOW_THIS_PAGE_ON_LOAD
             )
         ),
         html.H6(
