@@ -2,7 +2,6 @@ import pandas as pd
 import psycopg2
 import os
 import plotly
-from dash.dependencies import Input, Output, State
 
 assert os.environ.get('DATABASE_URL') is not None, 'database URL is not set!'
 
@@ -65,6 +64,7 @@ def get_continuous_color(intermed):
     :param intermed: value in the range [0, 1]
     :return: color in rgb string format
     :rtype: str
+    SOURCE: https://stackoverflow.com/questions/62710057/access-color-from-plotly-color-scale
     """
     colors, scale = plotly.colors.convert_colors_to_same_type(plotly.colors.diverging.RdYlGn)
     colorscale = plotly.colors.make_colorscale(colors, scale=scale)
@@ -109,9 +109,11 @@ def get_colors(geo_route, query_df):
             arr_or_dep = 'Departure'
         elif station == arrival_station:
             arr_or_dep = 'Arrival'
-        td_minutes = delays.loc[(query_df['Station'] == station) & (query_df['Arrival or Departure'] == arr_or_dep)].values[0]
+        stn_cond = query_df['Station'] == station
+        arrdep_cond = query_df['Arrival or Departure'] == arr_or_dep
+        td_minutes = delays.loc[(stn_cond) & (arrdep_cond)].values[0]
         delays_return.loc[station] = td_minutes
-        counts_return.loc[station] = counts.loc[(query_df['Station'] == station) & (query_df['Arrival or Departure'] == arr_or_dep)].values[0]
+        counts_return.loc[station] = counts.loc[(stn_cond) & arrdep_cond].values[0]
         upper_bound = 18
         if td_minutes <= 0:
             colors_dict[station] = get_continuous_color(1)
