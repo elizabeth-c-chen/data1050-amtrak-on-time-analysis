@@ -4,12 +4,13 @@ import time
 from datetime import date, timedelta, datetime
 
 import numpy as np
+import pandas as pd
 import dash
 import dash_core_components as dcc
 import dash_bootstrap_components as dbc
 import dash_html_components as html
 from dash.dependencies import Input, Output, State
-
+from dash_table import DataTable
 import plotly.express as px
 import plotly.graph_objects as go
 
@@ -29,7 +30,7 @@ app = dash.Dash(
     update_title=None
 )
 server = app.server
-app.title = "DATA 1050 Final Project"
+app.title = "Elizabeth C. Chen – Project Portfolio"
 
 app.layout = html.Div([
     dcc.Location(id='url', refresh=False),
@@ -122,7 +123,7 @@ default_query = dedent(
             """
 )
 
-default_query_df = connect_and_query(default_query)
+default_query_df = pd.read_csv('./data/facts/default_route_query.csv')
 colors_dict, delays, counts, color_group_key = get_colors(geo_route, default_query_df)
 
 # Route Visualization with Stand-in Color Coded Groups
@@ -188,8 +189,7 @@ controls = dbc.Card(
                     value="\'Southbound\'",
                     inputStyle={"margin-right": "10px"},
                     style=OPTION_STYLE,
-                    persistence=True,
-                    persistence_type='session'
+                    persistence=False
                 ),
             ]
         ),
@@ -294,11 +294,9 @@ def generate_query(n_clicks, direction, days, weather_type):
             ORDER BY {sort_stop_num} ASC;
             """
         )
-        print(query)
         try:
             t0 = time.time()
             query_df = connect_and_query(query)
-            print(query_df)
             assert query_df.shape[0] > 0
         except AssertionError:
             raise dash.exceptions.PreventUpdate
@@ -360,9 +358,9 @@ specific_trip_controls = dbc.Card(
             min_date_allowed=date(2011, 1, 1),
             max_date_allowed=date.today()-timedelta(days=1),
             initial_visible_month=date.today(),
-            placeholder="Select a date",
-            with_full_screen_portal=True,
-            persistence=True
+            placeholder="Select or type a date (ex. July 4th, 2020)",
+            persistence=True,
+            persistence_type='session'
         ),
         html.Div(
             [
@@ -372,7 +370,9 @@ specific_trip_controls = dbc.Card(
                     id='train-num-picker',
                     searchable=True,
                     clearable=False,
-                    placeholder="Select a train number"
+                    placeholder="Select a train number",
+                    persistence=True,
+                    persistence_type='local'
                 )
             ],
             id='step-2-container',
@@ -390,7 +390,8 @@ specific_trip_controls = dbc.Card(
                     marks={
                         year: {'label': str(year)} for year in range(2011, 2022)
                     },
-                    id="historical-range-slider"
+                    id="historical-range-slider",
+                    persistence=True
                 )
             ],
             id='step-3-container',
@@ -406,17 +407,36 @@ specific_trip_controls = dbc.Card(
     ],
     body=True
 )
-hypo_test_view_initial = dbc.Card(
+
+enhancement_view = dbc.Card(
     [
-        html.P("Select a date and train to compare with its historical averages.")
+        dcc.Store(id="store", storage_type='session'),
+        dbc.CardHeader(
+            dbc.Tabs(
+                [
+                    dbc.Tab(label="View Trip Data", tab_id="trip"),
+                    dbc.Tab(label="View Historical Averages", tab_id="history"),
+                    dbc.Tab(label="View Database Query", tab_id="query")
+                ],
+                id="card-tabs",
+                card=True,
+                active_tab="trip",
+                persistence=False
+            )
+        ),
+        dbc.CardBody(
+            [
+                html.H5("Changing Query Settings on the left will enable you to view specific data against historical averages.")
+            ],
+            id="card-content"
+        )
     ],
-    id="enhancement-view"
+    body=True,
+    id="enhancement-view",
+    style={'height': 'auto'}
 )
 
-#hypo_test_view = dbc.Card(
-#[]
-#)
-
+enhancement_alert = html.Div(id="enhancement-alert")
 
 @app.callback(
     [
@@ -430,17 +450,18 @@ hypo_test_view_initial = dbc.Card(
 def show_step2(date_value):
     if date_value is not None:
         avail_trains_query = f"""
-                              SELECT DISTINCT train_num 
+                              SELECT DISTINCT CAST(train_num AS INTEGER)
                               FROM stops_joined 
-                              WHERE sched_arr_dep_date = '{date_value}'"""
+                              WHERE origin_date = '{date_value}'
+                              ORDER BY train_num ASC;"""
         result = connect_and_query(avail_trains_query)
         if result.shape[0] > 0:
-            step2_style = VIEWABLE_CARD_STYLE
             train_num_options = [
                 {'label': train_num, 'value': train_num} for train_num in result['train_num']
             ]
-            return step2_style, train_num_options
+            return VIEWABLE_CARD_STYLE, train_num_options
         else:
+            return HIDDEN_CARD_STYLE, []
             raise dash.exceptions.PreventUpdate
     else:
         raise dash.exceptions.PreventUpdate
@@ -462,76 +483,134 @@ def show_step3(train_num_selected):
         return step3_style, button_disabled
     else:
         raise dash.exceptions.PreventUpdate
-    
 
 
 @app.callback(
-    Output("enhancement-view", "children"),
     [
+        Output("card-content", "children"),
+        Output("store", "data"),
+        Output("enhancement-alert", "children")
+    ],
+    [
+        Input("card-tabs", "active_tab"),
         Input("enhancement-send-query-button", "n_clicks")
     ],
     [
         State("single-trip-date-picker", "date"),
         State("train-num-picker", "value"),
-        State("historical-range-slider", "value")
+        State("historical-range-slider", "value"),
+        State("store", "data")
     ]
 )
-def enable_send_query(n_clicks, selected_date, train_num, year_range):
-    if n_clicks is not None:
-        sort_stop_num = get_sort_from_train_num(train_num)
-        single_trip_query = f"""
-                             SELECT
-                                direction AS "Direction",
-                                station_code AS "Station",
-                                {sort_stop_num} AS "Stop Number",
-                                service_disruption AS "Service Disruption",
-                                cancellations AS "Cancellations",
-                                arrival_or_departure AS "Arrival or Departure",
-                                CAST(timedelta_from_sched AS integer) AS "Delay"
-                             FROM
-                                 stops_joined
-                             WHERE
-                                 origin_date = '{selected_date}' AND
-                                 train_num = '{train_num}'
-                             ORDER BY {sort_stop_num} ASC, arrival_or_departure ASC;
-                             """
-     #  sd_occurred = single_trip_query["Service Disruption"].astype(int)
-    #    print(sd_occurred)
-        historical_query = f"""
-                            SELECT
-                                station_code AS "Station",
-                                {sort_stop_num} AS "Stop Number",
-                                arrival_or_departure AS "Arrival or Departure",
-                                CAST(AVG(timedelta_from_sched) AS integer) AS "Average Delay",
-                                STDDEV_POP(timedelta_from_sched) AS "Standard Deviation"
-                            FROM
-                                stops_joined
-                            WHERE
-                                train_num = '{train_num}' AND
-                                origin_year BETWEEN {year_range[0]} AND {year_range[1]}
-                            GROUP BY station_code, {sort_stop_num}, arrival_or_departure
-                            ORDER BY {sort_stop_num} ASC, arrival_or_departure ASC;
-                            """
-        single_trip_df = connect_and_query(single_trip_query)
-        historical_df = connect_and_query(historical_query)
-        print(single_trip_df)
-        print(historical_df)
+def enable_send_query(active_tab, n_clicks, selected_date, train_num, year_range, stored_views):
+    if active_tab:
+        if n_clicks is not None:
+            sort_stop_num = get_sort_from_train_num(train_num)
+            single_trip_query = dedent(f"""
+                        SELECT
+                            station_code AS "Station",
+                            {sort_stop_num} AS "Stop Number",
+                            sched_arr_dep_time AS "Scheduled Time",
+                            act_arr_dep_time AS "Actual Time",
+                            arrival_or_departure AS "Arrival or Departure",
+                            temperature AS "Temp (°F)",
+                            precipitation AS "Precip (in)",
+                            CAST(timedelta_from_sched AS integer) AS "Mins from Scheduled"
+                        FROM
+                            stops_joined
+                        WHERE
+                            origin_date = '{selected_date}' AND
+                            train_num = '{train_num}'
+                        ORDER BY {sort_stop_num} ASC, arrival_or_departure ASC;
+                        """
+            )
+            historical_query = dedent(f"""
+                        SELECT
+                            station_code AS "Station",
+                            {sort_stop_num} AS "Stop Number",
+                            arrival_or_departure AS "Arrival or Departure",
+                            CAST(AVG(timedelta_from_sched) AS INTEGER) AS "Avg. Mins from Scheduled",
+                            ROUND(STDDEV_POP(timedelta_from_sched), 1) AS "Standard Deviation",
+                            COUNT(*) AS "Num Records Averaged"
+                        FROM
+                            stops_joined
+                        WHERE
+                            train_num = '{train_num}' AND
+                            origin_year BETWEEN {year_range[0]} AND {year_range[1]}
+                        GROUP BY station_code, {sort_stop_num}, arrival_or_departure
+                        ORDER BY {sort_stop_num} ASC, arrival_or_departure ASC;
+                        """
+            )
+            single_trip_df = connect_and_query(single_trip_query).drop('Stop Number', axis=1)
+            if single_trip_df.shape[0] == 0:
+                error_view = [
+                    html.H6("An error occurred for this specific trip; please try another one!")
+                ]
+                alert_msg = f"An error occurred for Train {train_num} on {selected_date}. "
+                alert = dbc.Alert(alert_msg, color="warning", dismissable=True)
+                return error_view, None, alert
+            historical_df = connect_and_query(historical_query).drop('Stop Number', axis=1)
+            formatted_date = datetime.strptime(selected_date, '%Y-%m-%d').strftime('%b %d, %Y')
+            trip_view = [
+                html.H6(f"Trip Data for Train {train_num} on {formatted_date}"),
+                DataTable(
+                    columns=[{"name": col, "id": col} for col in single_trip_df.columns],
+                    data=single_trip_df.to_dict('records'),
+                    style_header={'backgroundColor': 'rgb(183,224,248)'},
+                    style_cell=dict(textAlign='left', fontSize='13px')
+                )
+            ]
+            if year_range[0] == year_range[1]:
+                historical_title = f"Historical Data for Train {train_num} for Year {year_range[0]}"
+            else:
+                historical_title = f"Historical Data for Train {train_num} for Years {year_range[0]} to {year_range[1]}"
+            historical_view = [
+                html.H6(historical_title, className="card-title"),
+                DataTable(
+                    columns=[{"name": col, "id": col} for col in historical_df.columns],
+                    data=historical_df.to_dict('records'),
+                    style_header={'backgroundColor': 'rgb(183,224,248)'},
+                    style_cell=dict(textAlign='left', fontSize='13px')
+                )
+            ]
+            query_view = [
+                html.H6("This is the query that was used to retrieve historical data from the database."),
+                dcc.Markdown(f"```\n{historical_query}\n```", id="sql-query", style={'width': '75%', 'margin': 'auto'})
+            ]
+            stored_views = {'trip': trip_view, 'history': historical_view, 'query': query_view}
+            alert_msg = f"Successfully processed query for Train {train_num} on {formatted_date}."
+            alert = dbc.Alert(alert_msg, color="success", dismissable=True)
+            return stored_views[active_tab], stored_views, alert
+        elif n_clicks is None:
+            if stored_views is not None:
+                formatted_date = datetime.strptime(selected_date, '%Y-%m-%d').strftime('%b %d, %Y')
+                alert_msg = f"Showing previously queried data for Train {train_num} on {formatted_date}"
+                alert = dbc.Alert(alert_msg, color="success", dismissable=True)
+                return stored_views[active_tab], stored_views, alert
+            else:
+                alert = dbc.Alert("Hint: Change the settings above to view and compare data.", color="info", dismissable=True)
+                return [html.H6("Change the settings on the left!")], None, alert
+        else:
+            alert = dbc.Alert("Hint: Change the settings above to view and compare data.", color="info", dismissable=True)
+            return [html.H6("Change the settings on the left!")], None, alert
     else:
-        raise dash.exceptions.PreventUpdate
-
+        alert = dbc.Alert("Hint: Change the settings above to view and compare data.", color="info", dismissable=True)
+        return [html.H6("Change the settings on the left!")], None, alert
 
 ######################
 # NAVIGATION
 ######################
 nav = dbc.Nav(
     [
-        dbc.NavItem(dbc.NavLink("About the Project", active="exact", href="/data1050-app-home")),
+        dbc.NavItem(dbc.NavLink("About the Project", active="exact", href="/data1050-app-about")),
+        dbc.NavItem(dbc.NavLink("More Technical Details", active="exact", href="/data1050-app-details")),
         dbc.NavItem(dbc.NavLink("On-Time Performance Visualizer", active="exact", href="/data1050-app-viz")),
-        dbc.NavItem(dbc.NavLink("On-Time Performance Comparison", active="exact", href="/data1050-app-enhancement")),
+        dbc.NavItem(dbc.NavLink("On-Time Performance Comparison", active="exact", href="/data1050-app-analysis")),
         dbc.DropdownMenu(
             [
                 dbc.DropdownMenuItem("Github Repository", href="https://github.com/elizabeth-c-chen/data1050-amtrak-on-time-analysis", id="button-link"),
-                dbc.DropdownMenuItem("View Data Retrieval & Database Loading Notebook", href="https://nbviewer.jupyter.org/github/elizabeth-c-chen/data1050-amtrak-on-time-analysis/blob/master/EDA_ETL.ipynb", id="button-link")
+                dbc.DropdownMenuItem("View Data Retrieval & Database Loading Notebook", href="https://nbviewer.jupyter.org/github/elizabeth-c-chen/data1050-amtrak-on-time-analysis/blob/master/EDA_ETL.ipynb", id="button-link"),
+                                dbc.DropdownMenuItem("View Setup Work for Route Visualization Notebook", href="https://nbviewer.jupyter.org/github/elizabeth-c-chen/data1050-amtrak-on-time-analysis/blob/master/Determine_Station_Paths.ipynb", id="button-link")
             ],
             label="View Source Code",
             nav=True
@@ -539,7 +618,8 @@ nav = dbc.Nav(
     ],
     pills=True,
     horizontal='center',
-    card=True
+    card=True,
+    justified=True
 )
 
 
@@ -547,13 +627,62 @@ nav = dbc.Nav(
 # PAGE LAYOUTS
 ######################
 SHOW_THIS_PAGE_ON_LOAD = "/data1050-app-viz"
+
+index_page_layout = html.Div(
+    children=[
+        html.H3(html.A(
+            children="Portfolio of Elizabeth C. Chen",
+            href='/')
+        ),
+        html.H5(
+            children="Hi! My name is Elizabeth and I am a student in the Data Science Master's program at Brown University."
+        ),
+        html.H6(html.A(
+            children='DATA 1030 Project – Machine Learning Applied to Automated Theorem Proving',
+            href='https://github.com/elizabeth-c-chen/data1030-ML-theorem-proving'
+            )
+        ),
+        html.H6(html.A(
+            children='DATA 1050 Project – Amtrak Northeast Regional On-Time Analysis App',
+            href=SHOW_THIS_PAGE_ON_LOAD
+            )
+        )
+    ],
+    style={'display': 'block', 'margin-left': 'auto', 'margin-right': 'auto'}
+)
+
 unfinished = html.P("This page is coming soon!", style={'text-align': 'center', 'font-size': 50})
 
-
-data1050_app_home_layout = dbc.Container(
+data1050_app_about_layout = dbc.Container(
     [
         html.H3(html.A(children="Portfolio of Elizabeth C. Chen", href='/')),
         html.H4(html.A("Amtrak Northeast Regional On-Time Performance Explorer", href=SHOW_THIS_PAGE_ON_LOAD)),
+        html.H6("A DATA 1050 Final Project", style={'padding-top': '-10px', 'padding-bottom': '-10px'}),
+        nav,
+        dbc.Row(
+            [
+                dbc.Col(unfinished, md=12, lg=12)
+            ],
+            no_gutters=False
+        ),
+        dbc.Row(
+            [
+                html.P(
+                    children="You are visiting the portfolio of Elizabeth C. Chen, Master's \
+                        student at Brown University. This webpage is not affiliated with \
+                        Amtrak in any way.",
+                    style={'font-size': 12, 'display': 'block', 'padding-top': '3%', 'margin-left': 'auto', 'margin-right': 'auto'}
+                )
+            ]
+        )
+    ],
+    fluid=True
+)
+
+data1050_app_details_layout = dbc.Container(
+    [
+        html.H3(html.A(children="Portfolio of Elizabeth C. Chen", href='/')),
+        html.H4(html.A("Amtrak Northeast Regional On-Time Performance Explorer", href='/data1050-app-details')),
         html.H6("A DATA 1050 Final Project", style={'padding-top': '-10px', 'padding-bottom': '-10px'}),
         nav,
         dbc.Row(
@@ -611,8 +740,8 @@ data1050_app_enhancement_layout = dbc.Container(
         nav,
         dbc.Row(
             [
-                dbc.Col([specific_trip_controls], md=5, lg=4),
-                dbc.Col(hypo_test_view_initial, md=7, lg=8)
+                dbc.Col([specific_trip_controls, enhancement_alert], md=5, lg=4),
+                dbc.Col(enhancement_view , md=7, lg=8)
             ],
             no_gutters=False
         ),
@@ -632,11 +761,13 @@ data1050_app_enhancement_layout = dbc.Container(
 
 error_page_layout = html.Div(
     children=[
-        html.H3(children="Uh oh! You have reached a page that doesn't exist"),
+        html.H3(html.A(children="Portfolio of Elizabeth C. Chen", href='/')),
+        html.H4(children="Uh oh! You have reached a page that doesn't exist"),
         html.H6(html.A(children='Click here to return to the homepage.', href='/'))
     ],
     style={'display': 'block', 'margin-left': 'auto', 'margin-right': 'auto'}
 )
+
 
 @app.callback(
     dash.dependencies.Output('page-content', 'children'),
@@ -644,16 +775,18 @@ error_page_layout = html.Div(
 )
 def display_page(pathname):
     if pathname == '/':
-        return data1050_app_home_layout
-    elif pathname == '/data1050-app-home':
-        return data1050_app_home_layout
+        return index_page_layout
+    elif pathname == '/data1050-app-about':
+        return data1050_app_about_layout
+    elif pathname == '/data1050-app-details':
+        return data1050_app_details_layout
     elif pathname == '/data1050-app-viz':
         return data1050_app_viz_layout
-    elif pathname == '/data1050-app-enhancement':
+    elif pathname == '/data1050-app-analysis':
         return data1050_app_enhancement_layout
     else:
         return error_page_layout
 
 
 if __name__ == '__main__':
-    app.run_server(port=8051, debug=True)
+    app.run_server(port=8052, debug=False)
