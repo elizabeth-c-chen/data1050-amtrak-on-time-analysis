@@ -1,13 +1,12 @@
 import os
 import time
+import logging
 from datetime import date, timedelta, datetime
 from textwrap import dedent
 
 import numpy as np
 import pandas as pd
-
 import psycopg2
-from flask_apscheduler import APScheduler
 
 from dash import Dash
 import dash_core_components as dcc
@@ -19,8 +18,9 @@ from dash_table import DataTable
 import plotly.express as px
 import plotly.graph_objects as go
 
+from flask_apscheduler import APScheduler
 from utils import connect_and_query, get_colors, get_days, get_precip_types, \
-    get_sort_from_direction, join_datasets
+    get_sort_from_direction, join_datasets, setup_logger
 
 from trains_retrieve_and_process_data import ETL_previous_day_train_data
 from weather_retrieve_and_process_data import ETL_previous_day_weather_data
@@ -44,25 +44,33 @@ app.layout = html.Div(
 )
 
 #############################
-# DATABASE + SCHEDULER SETUP
+# LOGGER SETUP
 #############################
+logger = logging.Logger(__name__)
+setup_logger(logger, 'etl.log')
 
-assert os.environ.get('DATABASE_URL') is not None, 'database URL is not set!'
-conn = psycopg2.connect(os.environ.get('DATABASE_URL'))
+
+############################
+# CRON JOB SCHEDULER SETUP
+############################
 
 scheduler = APScheduler()
 scheduler.init_app(app)
 
 
-@scheduler.task('cron', id='etl_and_join', hour=5, minute=45)  # CHANGE TO hour=6, minute=30
+@scheduler.task('cron', id='etl_and_join', hour=10) # UTC Time (6am EST)
 def cron_etl_job():
+    conn = psycopg2.connect(os.environ.get('DATABASE_URL'), sslmode='require')
+    if conn:
+        logger.info("Connection to database successful.")
+    else:
+        logger.info("Connection to database FAILED.")
     ETL_previous_day_train_data(conn)
     ETL_previous_day_weather_data(conn)
     join_datasets(conn)
 
 
 scheduler.start()
-
 
 #############################
 # MAP SETUP
@@ -167,7 +175,7 @@ INPUT_STYLE = {"margin-right": "10px"}
 #############################
 
 # Load default data from file on disk
-default_query_df = pd.read_csv('./data/facts/default_route_query.csv')
+default_query_df = pd.read_csv('./data/default_route_query.csv')
 colors_dict, delays, counts, color_group_key = get_colors(geo_route, default_query_df)
 
 route = px.line_mapbox(geo_route,
@@ -715,6 +723,15 @@ def enable_send_query(active_tab, n_clicks, selected_date, train_num, year_range
         )
         return [html.H6("Change the settings on the left!")], None, alert
 
+#############################
+# ABOUT PROJECT PAGE
+#############################
+
+
+#############################
+# TECHNICAL DETAILS PAGE
+#############################
+
 
 #############################
 # NAVIGATION
@@ -1019,4 +1036,4 @@ def display_page(pathname):
 
 
 if __name__ == '__main__':
-    app.run_server(port=8050, debug=False)
+    app.run_server(port=8050, debug=True)

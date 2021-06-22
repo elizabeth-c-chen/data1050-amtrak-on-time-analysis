@@ -14,7 +14,7 @@ assert os.environ.get('DATABASE_URL') is not None, 'database URL is not set!'
 # Set up logger
 #############################
 def setup_logger(logger, output_file):
-    logger.setLevel(logging.INFO)
+    logger.setLevel(logging.DEBUG)
 
     stdout_handler = logging.StreamHandler(sys.stdout)
     stdout_handler.setFormatter(logging.Formatter('%(asctime)s [%(funcName)s]: %(message)s'))
@@ -23,6 +23,7 @@ def setup_logger(logger, output_file):
     file_handler = logging.FileHandler(output_file)
     file_handler.setFormatter(logging.Formatter('%(asctime)s [%(funcName)s] %(message)s'))
     logger.addHandler(file_handler)
+
 
 logger = logging.Logger(__name__)
 setup_logger(logger, 'etl.log')
@@ -187,7 +188,7 @@ def join_datasets(conn):
     execute_command(conn, join_command)
     execute_command(conn, remove_duplicates)
     execute_command(conn, update_precip)
-    logger.info(f"{datetime.now()} | Successful join of new stops and weather data.")
+    logger.info("Successful join of new stops and weather data.")
 
 
 def connect_and_query(query):
@@ -198,6 +199,7 @@ def connect_and_query(query):
     query_data = pd.read_sql(query, conn)
     conn.close()
     return query_data
+
 
 #####################################
 # Functions to help construct queries
@@ -256,8 +258,37 @@ def get_continuous_color(intermed):
     :rtype: str
     SOURCE: https://stackoverflow.com/questions/62710057/access-color-from-plotly-color-scale
     """
-    colors, scale = plotly.colors.convert_colors_to_same_type(plotly.colors.diverging.RdYlGn)
+    #colorscheme = plotly.colors.sequential.Turbo
+    colorscheme = plotly.colors.diverging.RdYlGn
+    colors, scale = plotly.colors.convert_colors_to_same_type(colorscheme)
     colorscale = plotly.colors.make_colorscale(colors, scale=scale)
+    # colorscale = [
+    #     [0.0, 'rgb(145,17,0)'],
+    #     [0.1, 'rgb(242,28,0)'],
+    #     [0.2, 'rgb(242,61,0)'],
+    #     [0.3, 'rgb(242,101,0)'],
+    #     [0.4, 'rgb(242,133,0)'],
+    #     [0.5, 'rgb(242,170,0)'],
+    #     [0.6, 'rgb(240, 192, 0'],
+    #     [0.7, 'rgb(242,226,0)'],
+    #     [0.8, 'rgb(202,242,0)'],
+    #     [0.9, 'rgb(137,242,0)'],
+    #     [1.0, 'rgb(28,242,0)']
+    # ]
+    # colorscale = [
+    #     [0.0, 'rgb(28,242,0)'],
+    #     [0.1, 'rgb(137,242,0)'],
+    #     [0.2, 'rgb(202,242,0)'],
+    #     [0.3, 'rgb(242,226,0)'],
+    #     [0.4, 'rgb(240,192,0)'],
+    #     [0.5, 'rgb(242,170,0)'],
+    #     [0.6, 'rgb(242,133,0)'],
+    #     [0.7, 'rgb(242,101,0)'],
+    #     [0.8, 'rgb(242,61,0)'],
+    #     [0.9, 'rgb(242,28,0)'],
+    #     [1.0, 'rgb(145,17,0)'],
+    # ]
+
     if intermed <= 0:
         return colorscale[0][1]
     if intermed >= 1:
@@ -304,10 +335,7 @@ def get_colors(geo_route, query_df):
         td_minutes = delays.loc[(stn_cond) & (arrdep_cond)].values[0]
         delays_return.loc[station] = td_minutes
         counts_return.loc[station] = counts.loc[(stn_cond) & arrdep_cond].values[0]
-        upper_bound = 18
-        if td_minutes <= 0:
-            colors_dict[station] = get_continuous_color(1)
-        else:
-            val = (upper_bound - td_minutes) / upper_bound
-            colors_dict[station] = get_continuous_color(val)
+        upper_bound = 20
+        val = (upper_bound - td_minutes) / upper_bound
+        colors_dict[station] = get_continuous_color(val)
     return colors_dict, delays_return, counts_return, color_group_key

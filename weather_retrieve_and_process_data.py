@@ -72,8 +72,6 @@ def retrieve_weather_data(start=yesterday, end=yesterday):
     successful_retrievals = []
     failed_retrievals = []
     for locname, filename in zip(locations_urlstring, locations_filestring):
-        print('Retrieving data for LOCATION: {}'.format(filename))
-        print('    and DATE RANGE: {}T00:00:00 to {}T23:59:00'.format(start, end))
         CSVstring = './data/weather_raw/{}_weather_data_{}_{}.csv'.format(filename, start, end)
         if not os.path.exists(CSVstring):
             URL_LOC = '&location=' + locname
@@ -92,10 +90,6 @@ def retrieve_weather_data(start=yesterday, end=yesterday):
         elif os.path.exists(CSVstring):
             failed_retrievals.append((CSVstring, 'Error: File Already Exists'))
             continue
-    if len(successful_retrievals) > 0:
-        print('Successfully collected data has been saved at the following filenames:')
-        for location, filestring in successful_retrievals:
-            print('        FILE:   {}'.format(filestring))
     if len(failed_retrievals) > 0:
         print('Failed to retrieve data for the following filenames:')
         for filestring, error in failed_retrievals:
