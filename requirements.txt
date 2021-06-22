@@ -1,10 +1,7 @@
 jupyterlab
 dash
-dash_html_components
 dash_bootstrap_components
-dash_core_components
 plotly
-plotly_express
 pandas
 geopandas
 lxml
@@ -12,5 +9,4 @@ requests
 psycopg2
 ipython-sql
 gunicorn
-sqlalchemy
-APScheduler
+Flask-APScheduler

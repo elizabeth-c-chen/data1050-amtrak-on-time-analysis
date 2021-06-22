@@ -1,11 +1,11 @@
 import time
+import logging
 import requests
 import re
 import lxml.html as lh
 import pandas as pd
 import numpy as np
 from datetime import date, timedelta, datetime
-import logging
 from utils import setup_logger, update_trains
 
 #############################
@@ -333,12 +333,12 @@ def ETL_previous_day_train_data(conn):
     raw_data = retrieve_data(start=yesterday, end=yesterday)
     depart = raw_data_to_raw_df(raw_data, 'Depart')
     arrive = raw_data_to_raw_df(raw_data, 'Arrive')
-    arrive.to_csv('./temp/arrive_yesterday_raw.csv', line_terminator='\n', index=False)
-    depart.to_csv('./temp/depart_yesterday_raw.csv', line_terminator='\n', index=False)
+    arrive.to_csv('/tmp/arrive_yesterday_raw.csv', line_terminator='\n', index=False)
+    depart.to_csv('/tmp/depart_yesterday_raw.csv', line_terminator='\n', index=False)
     full_arrive = process_columns(arrive, 'Arrive')
     full_depart = process_columns(depart, 'Depart')
-    full_arrive.to_csv('./temp/arrive_yesterday.csv', line_terminator='\n', index=False)
-    full_depart.to_csv('./temp/depart_yesterday.csv', line_terminator='\n', index=False)
+    full_arrive.to_csv('/tmp/arrive_yesterday.csv', line_terminator='\n', index=False)
+    full_depart.to_csv('/tmp/depart_yesterday.csv', line_terminator='\n', index=False)
     update_trains(conn, insert_into_stops, 'Arrival', './temp/arrive_yesterday.csv')
     logger.info(f"Successful ETL of yesterday's arrival data for (# Rows Kept: {full_arrive.shape[0]}/{arrive.shape[0]})")
     update_trains(conn, insert_into_stops, 'Departure', './temp/depart_yesterday.csv')

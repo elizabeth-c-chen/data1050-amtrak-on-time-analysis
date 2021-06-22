@@ -601,7 +601,7 @@ def enable_send_query(active_tab, n_clicks, selected_date, train_num, year_range
                     arrival_or_departure AS "Arrival or Departure",
                     ROUND(AVG(timedelta_from_sched), 1) AS "Avg. Mins from Scheduled",
                     ROUND(percentile_cont(0.25) WITHIN GROUP (ORDER BY timedelta_from_sched)) AS "Q1",
-                    ROUND(percentile_cont(0.5) WITHIN GROUP (ORDER BY timedelta_from_sched)) AS "Median",
+                    ROUND(percentile_cont(0.50) WITHIN GROUP (ORDER BY timedelta_from_sched)) AS "Median",
                     ROUND(percentile_cont(0.75) WITHIN GROUP (ORDER BY timedelta_from_sched)) AS "Q3",
                     COUNT(*) AS "Num Records Averaged"
                 FROM
@@ -668,7 +668,7 @@ def enable_send_query(active_tab, n_clicks, selected_date, train_num, year_range
                     f"```\n{historical_query}\n```",
                     id="sql-query",
                     style={
-                        'width': '75%',
+                        'width': '85%',
                         'margin': 'auto'
                     }
                 )

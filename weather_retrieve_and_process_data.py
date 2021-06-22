@@ -160,7 +160,7 @@ def ETL_previous_day_weather_data(conn):
     URL_KEY = '&key=' + os.environ.get('VC_TOKEN')
     successful_processes = []
     for location, filename in zip(locations_urlstring, locations_filestring):
-        CSVstring = './temp/{}_weather_yesterday.csv'.format(filename)
+        CSVstring = '/tmp/{}_weather_yesterday.csv'.format(filename)
         URL_LOC = '&location=' + location
         URL = URL_BASE + URL_LOC + URL_KEY
         response = requests.get(URL)
@@ -179,7 +179,7 @@ def ETL_previous_day_weather_data(conn):
         drop_na_index = full_weather[['Temperature', 'Precipitation', 'Cloud Cover']].replace('', np.nan).dropna().index
         full_weather = full_weather.iloc[drop_na_index]
         rows_kept = drop_na_index.shape[0]
-        CSVstring_proc = f"./temp/{filename}_weather_subset_yesterday.csv"
+        CSVstring_proc = f"/tmp/{filename}_weather_subset_yesterday.csv"
         full_weather.to_csv(CSVstring_proc, line_terminator='\n', index=False)
         successful_processes.append((filename, CSVstring_proc, rows_kept))
     for filename, filestring, rows_kept in successful_processes:
