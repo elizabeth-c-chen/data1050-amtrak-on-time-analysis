@@ -1,11 +1,10 @@
-.DS_Store
-logfile
+.*
 Untitled*
-temp*
+logfile
+amtrak-project.code-workspace
 __pycache__/
-.*/
-assets/
 data/
 local/
 *db/
-amtrak-project.code-workspace
+*.css
+etl.log

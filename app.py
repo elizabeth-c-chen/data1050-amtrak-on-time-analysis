@@ -22,8 +22,8 @@ from flask_apscheduler import APScheduler
 from utils import connect_and_query, get_colors, get_days, get_precip_types, \
     get_sort_from_direction, join_datasets, setup_logger
 
-from trains_retrieve_and_process_data import ETL_previous_day_train_data
-from weather_retrieve_and_process_data import ETL_previous_day_weather_data
+from trains_ETL import ETL_previous_day_train_data
+from weather_ETL import ETL_previous_day_weather_data
 
 
 #############################
@@ -35,7 +35,7 @@ app = Dash(
     update_title=None
 )
 server = app.server
-app.title = "Elizabeth C. Chen – Project Portfolio"
+app.title = "Elizabeth C. Chen"
 app.layout = html.Div(
     [
         dcc.Location(id='url', refresh=False),
@@ -53,7 +53,6 @@ setup_logger(logger, 'etl.log')
 ############################
 # CRON JOB SCHEDULER SETUP
 ############################
-
 scheduler = APScheduler()
 scheduler.init_app(app)
 
@@ -135,7 +134,6 @@ OPTION_STYLE = {
     'padding-left': '5%'
 }
 OPTION_LABEL_STYLE = {'font-size': 15}
-
 VIEWABLE_CARD_STYLE = {'display': 'block'}
 HIDDEN_CARD_STYLE = {'display': 'none', 'padding-top': '5%'}
 ERROR_CARD_LABEL_STYLE = {
@@ -147,8 +145,6 @@ BUTTON_STYLE = {
     'font-size': 15,
     'margin-top': '2.5%'
 }
-
-
 FIGURE_STYLE = {
     'height': 550,
     'width': 950
@@ -173,8 +169,6 @@ INPUT_STYLE = {"margin-right": "10px"}
 #############################
 # VISUALIZATION PAGE
 #############################
-
-# Load default data from file on disk
 default_query_df = pd.read_csv('./data/default_route_query.csv')
 colors_dict, delays, counts, color_group_key = get_colors(geo_route, default_query_df)
 
