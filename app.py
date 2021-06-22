@@ -1,10 +1,14 @@
 import os
-from textwrap import dedent
 import time
 from datetime import date, timedelta, datetime
+from textwrap import dedent
 
 import numpy as np
 import pandas as pd
+
+import psycopg2
+from flask_apscheduler import APScheduler
+
 from dash import Dash
 import dash_core_components as dcc
 import dash_bootstrap_components as dbc
@@ -16,16 +20,15 @@ import plotly.express as px
 import plotly.graph_objects as go
 
 from utils import connect_and_query, get_colors, get_days, get_precip_types, \
-    get_sort_from_train_num, get_sort_from_direction
+    get_sort_from_direction, join_datasets
 
-######################
-# DATABASE SETUP
-######################
-assert os.environ.get('DATABASE_URL') is not None, 'database URL is not set!'
+from trains_retrieve_and_process_data import ETL_previous_day_train_data
+from weather_retrieve_and_process_data import ETL_previous_day_weather_data
 
-######################
+
+#############################
 # DASH SETUP
-######################
+#############################
 app = Dash(
     __name__,
     suppress_callback_exceptions=True,
@@ -33,7 +36,6 @@ app = Dash(
 )
 server = app.server
 app.title = "Elizabeth C. Chen – Project Portfolio"
-
 app.layout = html.Div(
     [
         dcc.Location(id='url', refresh=False),
@@ -41,9 +43,30 @@ app.layout = html.Div(
     ]
 )
 
-######################
+#############################
+# DATABASE + SCHEDULER SETUP
+#############################
+
+assert os.environ.get('DATABASE_URL') is not None, 'database URL is not set!'
+conn = psycopg2.connect(os.environ.get('DATABASE_URL'))
+
+scheduler = APScheduler()
+scheduler.init_app(app)
+
+
+@scheduler.task('cron', id='etl_and_join', hour=5, minute=45)  # CHANGE TO hour=6, minute=30
+def cron_etl_job():
+    ETL_previous_day_train_data(conn)
+    ETL_previous_day_weather_data(conn)
+    join_datasets(conn)
+
+
+scheduler.start()
+
+
+#############################
 # MAP SETUP
-######################
+#############################
 assert os.environ.get('MAPBOX_TOKEN') is not None, 'empty token'
 px.set_mapbox_access_token(os.environ.get('MAPBOX_TOKEN'))
 
@@ -53,12 +76,14 @@ geo_info_query = dedent(
         station_code AS "STNCODE",
         amtrak_station_name as "STNNAME",
         longitude as "LON",
-        latitude as "LAT"
+        latitude as "LAT",
+        nb_mile AS "NB_MILE",
+        sb_mile AS "SB_MILE"
     FROM
         station_info;
     """
 )
-geo_info = connect_and_query(geo_info_query)
+geo_info = connect_and_query(geo_info_query).set_index("STNCODE")
 
 geo_route_query = dedent(
     """
@@ -75,12 +100,15 @@ geo_route_query = dedent(
 )
 geo_route = connect_and_query(geo_route_query)
 
-amtrak_stations = list(geo_info['STNCODE'])
+amtrak_stations = list(geo_info.index)
 location_names = list(geo_info['STNNAME'])
+nb_mile_markers = list(geo_info["NB_MILE"])
+sb_mile_markers = list(geo_info["SB_MILE"])
 
-######################
+
+#############################
 # STYLING
-######################
+#############################
 OPTION_LABEL_STYLE_WITH_DOWN_MARGIN = {
     'font-size': 15,
     'margin-bottom': '2.5%'
@@ -132,35 +160,16 @@ FIGURE_LAYOUT_STYLE = {
 }
 INSTRUCTION_STYLE = {'font-size': 15}
 INPUT_STYLE = {"margin-right": "10px"}
-######################
-# VISUALIZATION PAGE
-######################
-default_query = dedent(
-    """
-    SELECT
-        direction AS "Direction",
-        station_code AS "Station",
-        sb_stop_num AS "Stop Number",
-        arrival_or_departure AS "Arrival or Departure",
-        CAST(AVG(timedelta_from_sched) AS INTEGER) AS "Average Delay",
-        COUNT(*) AS "Num Records"
-    FROM
-        stops_joined
-    WHERE
-        direction = 'Southbound' AND
-        sched_arr_dep_week_day IN
-            ('Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday')
-    GROUP BY
-        station_code, direction, sb_stop_num, arrival_or_departure
-    ORDER BY
-        sb_stop_num ASC;
-    """
-)
 
+
+#############################
+# VISUALIZATION PAGE
+#############################
+
+# Load default data from file on disk
 default_query_df = pd.read_csv('./data/facts/default_route_query.csv')
 colors_dict, delays, counts, color_group_key = get_colors(geo_route, default_query_df)
 
-# Route Visualization with Stand-in Color Coded Groups
 route = px.line_mapbox(geo_route,
                        lat=geo_route['Latitude'],
                        lon=geo_route['Longitude'],
@@ -180,7 +189,7 @@ route.add_trace(
         name='Amtrak Stations',
         hoverinfo='text',
         customdata=np.stack([delays, counts], axis=-1),
-        hovertext=np.stack([geo_info['STNNAME'], geo_info['STNCODE']], axis=-1),
+        hovertext=np.stack([geo_info['STNNAME'], geo_info.index], axis=-1),
         hovertemplate="""
                     %{hovertext[0]} (%{hovertext[1]}) <br>
                     Avg. Delay: %{customdata[0]} mins
@@ -190,6 +199,7 @@ route.add_trace(
         fill='none'
     )
 )
+
 route.update_layout(FIGURE_LAYOUT_STYLE)
 
 route.update_yaxes(automargin=True)
@@ -204,6 +214,7 @@ div_alert = html.Div(
     ),
     id="alert-msg"
 )
+
 controls = dbc.Card(
     [
         html.H6(
@@ -363,7 +374,7 @@ def generate_query(n_clicks, direction, days, weather_type):
             name='Amtrak Stations',
             hoverinfo='text',
             customdata=np.stack([delays, counts], axis=-1),
-            hovertext=np.stack([geo_info['STNNAME'], geo_info['STNCODE']], axis=-1),
+            hovertext=np.stack([geo_info['STNNAME'], geo_info.index], axis=-1),
             hovertemplate="""
                         %{hovertext[0]} (%{hovertext[1]}) <br>
                         Avg. Delay: %{customdata[0]} mins
@@ -386,9 +397,9 @@ def generate_query(n_clicks, direction, days, weather_type):
     return alert, route
 
 
-######################
+#############################
 # ENHANCEMENT PAGE
-######################
+#############################
 specific_trip_controls = dbc.Card(
     [
         html.H6(
@@ -558,7 +569,10 @@ def show_step3(train_num_selected):
 def enable_send_query(active_tab, n_clicks, selected_date, train_num, year_range, stored_views):
     if active_tab:
         if n_clicks is not None:
-            sort_stop_num = get_sort_from_train_num(train_num)
+            if train_num % 2 == 0:
+                sort_stop_num = 'nb_stop_num'
+            else:
+                sort_stop_num = 'sb_stop_num'
             single_trip_query = dedent(
                 f"""
                 SELECT
@@ -586,7 +600,9 @@ def enable_send_query(active_tab, n_clicks, selected_date, train_num, year_range
                     {sort_stop_num} AS "Stop Number",
                     arrival_or_departure AS "Arrival or Departure",
                     ROUND(AVG(timedelta_from_sched), 1) AS "Avg. Mins from Scheduled",
-                    ROUND(STDDEV_POP(timedelta_from_sched), 1) AS "Standard Deviation",
+                    ROUND(percentile_cont(0.25) WITHIN GROUP (ORDER BY timedelta_from_sched)) AS "Q1",
+                    ROUND(percentile_cont(0.5) WITHIN GROUP (ORDER BY timedelta_from_sched)) AS "Median",
+                    ROUND(percentile_cont(0.75) WITHIN GROUP (ORDER BY timedelta_from_sched)) AS "Q3",
                     COUNT(*) AS "Num Records Averaged"
                 FROM
                     stops_joined
@@ -599,21 +615,21 @@ def enable_send_query(active_tab, n_clicks, selected_date, train_num, year_range
                     {sort_stop_num} ASC, arrival_or_departure ASC;
                 """
             )
-            single_trip_df = connect_and_query(single_trip_query).drop('Stop Number', axis=1)
+            single_trip_df = connect_and_query(single_trip_query)
             if single_trip_df.shape[0] == 0:
                 error_view = [
                     html.H6("An error occurred for this specific trip; please try another one!")
                 ]
                 alert = dbc.Alert(
                     f"""
-                    An error occurred for Train {train_num} on {selected_date}. (Hint: \
+                     Train {train_num} is not available for {selected_date}. (Hint: \
                         You moved so quickly that the database could not catch up with you in time!)
                     """,
                     color="warning",
                     dismissable=True
                 )
                 return error_view, None, alert
-            historical_df = connect_and_query(historical_query).drop('Stop Number', axis=1)
+            historical_df = connect_and_query(historical_query)
             fmt_date = datetime.strptime(selected_date, '%Y-%m-%d').strftime('%b %d, %Y')
             trip_view = [
                 html.H6(
@@ -623,7 +639,8 @@ def enable_send_query(active_tab, n_clicks, selected_date, train_num, year_range
                     columns=[{"name": col, "id": col} for col in single_trip_df.columns],
                     data=single_trip_df.to_dict('records'),
                     style_header={'backgroundColor': 'rgb(183,224,248)'},
-                    style_cell=dict(textAlign='left', fontSize='13px')
+                    style_cell=dict(textAlign='left', fontSize='13px'),
+                    sort_action='native'
                 )
             ]
             if year_range[0] == year_range[1]:
@@ -639,7 +656,8 @@ def enable_send_query(active_tab, n_clicks, selected_date, train_num, year_range
                     columns=[{"name": col, "id": col} for col in historical_df.columns],
                     data=historical_df.to_dict('records'),
                     style_header={'backgroundColor': 'rgb(183,224,248)'},
-                    style_cell=dict(textAlign='left', fontSize='13px')
+                    style_cell=dict(textAlign='left', fontSize='13px'),
+                    sort_action='native'
                 )
             ]
             query_view = [
@@ -698,9 +716,9 @@ def enable_send_query(active_tab, n_clicks, selected_date, train_num, year_range
         return [html.H6("Change the settings on the left!")], None, alert
 
 
-######################
+#############################
 # NAVIGATION
-######################
+#############################
 nav = dbc.Nav(
     [
         dbc.NavItem(dbc.NavLink(
@@ -752,9 +770,9 @@ nav = dbc.Nav(
 )
 
 
-######################
+#############################
 # PAGE LAYOUTS
-######################
+#############################
 SHOW_THIS_PAGE_ON_LOAD = "/data1050-app-viz"
 
 index_page_layout = html.Div(
@@ -791,18 +809,12 @@ data1050_app_about_layout = dbc.Container(
     [
         html.H3(
             html.A(
-                "Portfolio of Elizabeth C. Chen",
-                href='/'
-            )
-        ),
-        html.H4(
-            html.A(
                 "Amtrak Northeast Regional On-Time Performance Explorer",
                 href=SHOW_THIS_PAGE_ON_LOAD
             )
         ),
-        html.H6(
-            "A DATA 1050 Final Project",
+        html.H5(
+            "Final Project for DATA 1050 by Elizabeth C. Chen",
             style={
                 'padding-top': '-10px',
                 'padding-bottom': '-10px'
@@ -839,16 +851,12 @@ data1050_app_details_layout = dbc.Container(
     [
         html.H3(
             html.A(
-                "Portfolio of Elizabeth C. Chen",
-                href='/')),
-        html.H4(
-            html.A(
                 "Amtrak Northeast Regional On-Time Performance Explorer",
                 href=SHOW_THIS_PAGE_ON_LOAD
             )
         ),
-        html.H6(
-            "A DATA 1050 Final Project",
+        html.H5(
+            "Final Project for DATA 1050 by Elizabeth C. Chen",
             style={
                 'padding-top': '-10px',
                 'padding-bottom': '-10px'
@@ -885,16 +893,12 @@ data1050_app_viz_layout = dbc.Container(
     [
         html.H3(
             html.A(
-                "Portfolio of Elizabeth C. Chen",
-                href='/')),
-        html.H4(
-            html.A(
                 "Amtrak Northeast Regional On-Time Performance Explorer",
                 href=SHOW_THIS_PAGE_ON_LOAD
             )
         ),
-        html.H6(
-            "A DATA 1050 Final Project",
+        html.H5(
+            "Final Project for DATA 1050 by Elizabeth C. Chen",
             style={
                 'padding-top': '-10px',
                 'padding-bottom': '-10px'
@@ -932,16 +936,12 @@ data1050_app_enhancement_layout = dbc.Container(
     [
         html.H3(
             html.A(
-                "Portfolio of Elizabeth C. Chen",
-                href='/')),
-        html.H4(
-            html.A(
                 "Amtrak Northeast Regional On-Time Performance Explorer",
                 href=SHOW_THIS_PAGE_ON_LOAD
             )
         ),
-        html.H6(
-            "A DATA 1050 Final Project",
+        html.H5(
+            "Final Project for DATA 1050 by Elizabeth C. Chen",
             style={
                 'padding-top': '-10px',
                 'padding-bottom': '-10px'
@@ -1019,4 +1019,4 @@ def display_page(pathname):
 
 
 if __name__ == '__main__':
-    app.run_server(port=8052, debug=True)
+    app.run_server(port=8050, debug=False)

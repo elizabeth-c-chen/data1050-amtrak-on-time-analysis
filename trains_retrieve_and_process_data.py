@@ -4,18 +4,32 @@ import re
 import lxml.html as lh
 import pandas as pd
 import numpy as np
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime
+import logging
+from utils import setup_logger, update_trains
 
+#############################
+# Set up logger
+#############################
+logger = logging.Logger(__name__)
+setup_logger(logger, 'etl.log')
+
+
+#############################
+# Helper functions
+#############################
 def make_dict():
     """
     Creates dictionary to hold raw data sorted by arrival and direction, then by station.
     """
-    dictionary = {'Arrive': {s: [] for s in ['NYP', 'NHV', 'PHL', 'BOS', 'WAS']},
-                  'Depart': {s: [] for s in ['BOS', 'BBY', 'RTE', 'PVD', 'KIN', 
-                                             'WLY', 'MYS', 'NLC', 'OSB', 'NHV', 
-                                             'BRP', 'STM', 'NRO', 'NYP', 'NWK', 
-                                             'EWR', 'MET', 'TRE', 'PHL', 'WIL', 
-                                             'ABE', 'BAL', 'BWI', 'NCR', 'WAS']}}
+    dictionary = {
+        'Arrive': {s: [] for s in ['NYP', 'NHV', 'PHL', 'BOS', 'WAS']},
+        'Depart': {s: [] for s in ['BOS', 'BBY', 'RTE', 'PVD', 'KIN',
+                                   'WLY', 'MYS', 'NLC', 'OSB', 'NHV',
+                                   'BRP', 'STM', 'NRO', 'NYP', 'NWK',
+                                   'EWR', 'MET', 'TRE', 'PHL', 'WIL',
+                                   'ABE', 'BAL', 'BWI', 'NCR', 'WAS']}
+        }
     return dictionary
 
 
@@ -56,7 +70,7 @@ def construct_urls(northbound_trains, southbound_trains, start_date, end_date):
     URL_END = '&sort_dir=ASC&co=gt&limit_mins=&dfon=1'
     DATES = convert_dates_to_string(start_date, end_date)
     arrive = ['NYP', 'NHV', 'PHL']
-    depart = ['BBY', 'RTE', 'PVD', 'KIN', 'WLY', 'MYS', 'NLC', 'OSB', 'NHV', 'BRP', 'STM', 'NRO', 
+    depart = ['BBY', 'RTE', 'PVD', 'KIN', 'WLY', 'MYS', 'NLC', 'OSB', 'NHV', 'BRP', 'STM', 'NRO',
               'NYP', 'NWK', 'EWR', 'MET', 'TRE', 'PHL', 'WIL', 'ABE', 'BAL', 'BWI', 'NCR']
     urls = {'Arrive': [], 'Depart': []}
     for trains_list in northbound_trains:
@@ -93,9 +107,9 @@ def make_request(url):
         response.raise_for_status()
         page = response.content
     except requests.exceptions.HTTPError as e:
-        print("An error occurred while retrieving data for the following url:")
-        print('        {}'.format(url))
-        print("        Error: {}".format(e))
+        logger.info("An error occurred while retrieving data for the following url:")
+        logger.info('        {}'.format(url))
+        logger.info("        Error: {}".format(e))
     return page
 
 
@@ -105,11 +119,11 @@ def retrieve_data(start=date.today()-timedelta(days=1), end=date.today()):
     start and end dates, defaults to retrieving data for yesterday.
     """
     # If querying a long time period, it is better to use smaller groups of trains (more requests)
-    northbound = [[66, 82, 86, 88, 94, 132, 96, 176, 178, 190, 194], [150, 160, 162, 164, 166, 168, 170, 172, 174]]
-    southbound = [[67, 83, 93, 95, 99, 135, 65, 149, 169, 177], [137, 139, 161, 163, 165, 167, 171, 173, 175, 195]]
+    # northbound = [[66, 82, 86, 88, 94, 132, 96, 176, 178, 190, 194], [150, 160, 162, 164, 166, 168, 170, 172, 174]]
+    # southbound = [[67, 83, 93, 95, 99, 135, 65, 149, 169, 177], [137, 139, 161, 163, 165, 167, 171, 173, 175, 195]]
     # If only querying a few days, we can just do them all at once
-    # northbound = [[66, 82, 86, 88, 94, 132, 96, 176, 178, 190, 194, 150, 160, 162, 164, 166, 168, 170, 172, 174]]
-    # southbound = [[67, 83, 93, 95, 99, 135, 65, 149, 169, 177, 137, 139, 161, 163, 165, 167, 171, 173, 175, 195]]   
+    northbound = [[66, 82, 86, 88, 94, 132, 96, 176, 178, 190, 194, 150, 160, 162, 164, 166, 168, 170, 172, 174]]
+    southbound = [[67, 83, 93, 95, 99, 135, 65, 149, 169, 177, 137, 139, 161, 163, 165, 167, 171, 173, 175, 195]]
     # Function can be found in fetch_data.py. It constructs the proper URL to run the query
     urls = construct_urls(northbound, southbound, start, end)
     raw_data = make_dict()
@@ -128,15 +142,17 @@ def retrieve_data(start=date.today()-timedelta(days=1), end=date.today()):
         else:
             failed_retrievals.append((station, url))
     if len(failed_retrievals) > 0:
-        print('Failed to retrieve data for the following filenames:')
+        logger.info('Failed to retrieve train data for the following filenames:')
         for station, url in failed_retrievals:
-            print('        STATION:   {}'.format(station))
-            print('        URL:   {}'.format(url))
-    print('Complete in {} seconds'.format(time.time() - start_time))
+            logger.info('        STATION:   {}'.format(station))
+            logger.info('        URL:   {}'.format(url))
+    logger.info(f"Train data retrieval complete in {time.time() - start_time} seconds")
     return raw_data
 
 
+#############################
 # Processing Data Functions
+#############################
 
 def get_direction(num):
     """
@@ -205,11 +221,7 @@ def raw_data_to_raw_df(raw_data, arrive_or_depart):
                     else:
                         continue
             else:
-                trains_list = [[66, 82, 86, 88, 94, 132, 96, 176, 178, 190, 194], 
-                               [150, 160, 162, 164, 166, 168, 170, 172, 174], 
-                               [67, 83, 93, 95, 99, 135, 65, 149, 169, 177], 
-                               [137, 139, 161, 163, 165, 167, 171, 173, 175, 195]]
-                print("STATION:   {}  ({}) - Train # Group: {} | No data for time period, or an error occurred during data retrieval.".format(station, arrive_or_depart, trains_list[i]))
+                logger.info(f"""STATION:   {station}  ({arrive_or_depart}) | No data for time period, or an error occurred during data retrieval.""")
     return pd.DataFrame.from_dict(data_dict)
 
 
@@ -278,3 +290,56 @@ def process_columns(df, arrive_or_depart):
     new_df['Service Disruption'] = df['Service Disruption'].astype(int)
     new_df['Cancellations'] = df['Cancellations'].astype(int)
     return new_df.replace('', np.nan).dropna()
+
+
+#######################################
+# PostgreSQL insert into stops command
+#######################################
+insert_into_stops = """
+                    INSERT INTO
+                        stops (
+                            arrival_or_departure,
+                            train_num,
+                            station_code,
+                            direction,
+                            origin_date,
+                            origin_year,
+                            origin_month,
+                            origin_week_day,
+                            full_sched_arr_dep_datetime,
+                            sched_arr_dep_date,
+                            sched_arr_dep_week_day,
+                            sched_arr_dep_time,
+                            act_arr_dep_time,
+                            full_act_arr_dep_datetime,
+                            timedelta_from_sched,
+                            service_disruption,
+                            cancellations
+                          )
+                    VALUES
+                        (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT DO NOTHING;
+                    """
+
+
+#######################################
+# PostgreSQL ETL Function for Trains
+#######################################
+def ETL_previous_day_train_data(conn):
+    """
+    Runs ETL for previous day's data
+    """
+    yesterday = date.today()-timedelta(days=1)
+    raw_data = retrieve_data(start=yesterday, end=yesterday)
+    depart = raw_data_to_raw_df(raw_data, 'Depart')
+    arrive = raw_data_to_raw_df(raw_data, 'Arrive')
+    arrive.to_csv('./temp/arrive_yesterday_raw.csv', line_terminator='\n', index=False)
+    depart.to_csv('./temp/depart_yesterday_raw.csv', line_terminator='\n', index=False)
+    full_arrive = process_columns(arrive, 'Arrive')
+    full_depart = process_columns(depart, 'Depart')
+    full_arrive.to_csv('./temp/arrive_yesterday.csv', line_terminator='\n', index=False)
+    full_depart.to_csv('./temp/depart_yesterday.csv', line_terminator='\n', index=False)
+    update_trains(conn, insert_into_stops, 'Arrival', './temp/arrive_yesterday.csv')
+    logger.info(f"Successful ETL of yesterday's arrival data for (# Rows Kept: {full_arrive.shape[0]}/{arrive.shape[0]})")
+    update_trains(conn, insert_into_stops, 'Departure', './temp/depart_yesterday.csv')
+    logger.info(f"Successful ETL of yesterday's departure data for (# Rows Kept: {full_depart.shape[0]}/{depart.shape[0]})")

@@ -1,14 +1,18 @@
-import pandas as pd
-import psycopg2
 import os
-import plotly
 import sys
+import csv
+import psycopg2
+from datetime import datetime
+import pandas as pd
+import plotly
 import logging
 
 assert os.environ.get('DATABASE_URL') is not None, 'database URL is not set!'
 
 
-# Logging setup for errors/warnings/issues
+#############################
+# Set up logger
+#############################
 def setup_logger(logger, output_file):
     logger.setLevel(logging.INFO)
 
@@ -20,16 +24,188 @@ def setup_logger(logger, output_file):
     file_handler.setFormatter(logging.Formatter('%(asctime)s [%(funcName)s] %(message)s'))
     logger.addHandler(file_handler)
 
+logger = logging.Logger(__name__)
+setup_logger(logger, 'etl.log')
 
-# Helper Functions for app.py
+#############################
+# Database commands setup
+#############################
+join_command = """
+            INSERT INTO stops_joined (
+            SELECT
+                stop_id,
+                arrival_or_departure,
+                train_num,
+                station_code,
+                direction,
+                origin_date,
+                origin_year,
+                origin_month,
+                origin_week_day,
+                full_sched_arr_dep_datetime,
+                sched_arr_dep_date,
+                sched_arr_dep_week_day,
+                sched_arr_dep_time,
+                act_arr_dep_time,
+                full_act_arr_dep_datetime,
+                timedelta_from_sched,
+                service_disruption,
+                cancellations,
+                crew_change,
+                nb_stop_num,
+                sb_stop_num,
+                temperature,
+                precipitation,
+                cloud_cover,
+                weather_type
+            FROM
+                stops s
+                INNER JOIN (
+                    SELECT
+                        station_code AS si_station_code,
+                        amtrak_station_name,
+                        crew_change,
+                        weather_location_name,
+                        nb_stop_num,
+                        sb_stop_num
+                    FROM
+                        station_info) si ON s.station_code = si.si_station_code
+                INNER JOIN weather_hourly wh ON wh.location = si.weather_location_name
+                    AND DATE_TRUNC('hour', s.full_act_arr_dep_datetime) = wh.obs_datetime
+            ORDER BY
+                s.full_sched_arr_dep_datetime
+            );
+            TRUNCATE TABLE stops;
+            TRUNCATE TABLE weather_hourly;
+            """
+
+remove_duplicates = """
+                    DELETE
+                    FROM stops_joined
+                    WHERE stops_joined.stop_id IN
+                    (
+                        SELECT sj_stop_id
+                        FROM(
+                            SELECT
+                                *,
+                                sj.stop_id AS sj_stop_id,
+                                row_number() OVER (
+                                    PARTITION BY
+                                        origin_date,
+                                        train_num,
+                                        station_code,
+                                        arrival_or_departure
+                                    ORDER BY stop_id
+                                )
+                            FROM stops_joined sj
+                        ) s
+                        WHERE row_number >= 2
+                    );
+                    """
+
+
+update_precip = """
+                UPDATE
+                    stops_joined
+                SET
+                    precip_type = (
+                        CASE WHEN weather_type = '' AND precipitation = 0 THEN
+                            'None'
+                        WHEN weather_type LIKE '%Snow%'
+                            AND weather_type LIKE '%Rain%' THEN
+                            'Snow'
+                        WHEN weather_type LIKE '%Snow%'
+                            AND weather_type NOT LIKE '%Rain%' THEN
+                            'Snow'
+                        WHEN weather_type LIKE '%Rain%'
+                            AND weather_type NOT LIKE '%Snow%' THEN
+                            'Rain'
+                        WHEN weather_type = '' AND precipitation > 0 AND temperature >= 32 THEN
+                            'Rain'
+                        WHEN weather_type = '' AND precipitation > 0 AND temperature < 32 THEN
+                            'Snow'
+                        END)
+                WHERE
+                    weather_type IS NOT NULL;
+                """
+
+
+##############################
+# Database operation functions
+##############################
+def execute_command(conn, command):
+    """
+    Execute specified command in PostgreSQL database.
+    """
+    try:
+        cur = conn.cursor()
+        cur.execute(command)
+        conn.commit()
+    except (Exception, psycopg2.DatabaseError) as error:
+        logger.info(f"""{datetime.now()} | DATABASE ERROR: {error}""")
+        conn.rollback()
+
+
+def update_table(conn, command, csv_file):
+    """
+    Insert rows from a CSV file into table specified by the command.
+    """
+    cur = conn.cursor()
+    with open(csv_file, newline='') as file:
+        info_reader = csv.reader(file, delimiter=',')
+        next(info_reader)  # Skip header
+        for row in info_reader:
+            try:
+                cur.execute(command, tuple(row))
+            except (Exception, psycopg2.DatabaseError) as error:
+                logger.info(f"""{datetime.now()} | DATABASE ERROR: {error}""")
+                conn.rollback()
+        conn.commit()
+
+
+def update_trains(conn, command, arr_or_dep, csv_file):
+    """
+    Insert rows from trains CSV file into table specified by the command.
+    """
+    cur = conn.cursor()
+    with open(csv_file, newline='') as file:
+        info_reader = csv.reader(file, delimiter=',')
+        next(info_reader)
+        for row in info_reader:
+            try:
+                cur.execute(command, tuple([arr_or_dep] + row))
+            except (Exception, psycopg2.DatabaseError) as error:
+                logger.info(f"""{datetime.now()} | DATABASE ERROR: {error}""")
+                conn.rollback()
+        conn.commit()
+
+
+def join_datasets(conn):
+    """
+    Join stops and weather tables and update the precipitation column.
+    """
+    execute_command(conn, join_command)
+    execute_command(conn, remove_duplicates)
+    execute_command(conn, update_precip)
+    logger.info(f"{datetime.now()} | Successful join of new stops and weather data.")
+
+
 def connect_and_query(query):
+    """
+    Connect to the PostgreSQL database and submit query and return the results.
+    """
     conn = psycopg2.connect(os.environ.get('DATABASE_URL'), sslmode='require')
     query_data = pd.read_sql(query, conn)
     conn.close()
     return query_data
 
-
+#####################################
+# Functions to help construct queries
+#####################################
 def get_days(days_selected):
+    """
+    Return the string used for PostgreSQL days of week query.
+    """
     output = '('
     day_names = ['Sunday', 'Monday', 'Tuesday', 'Wednesday',
                  'Thursday', 'Friday', 'Saturday']
@@ -41,6 +217,9 @@ def get_days(days_selected):
 
 
 def get_precip_types(precip_selected):
+    """
+    Return the string used for PostgreSQL precipitation type query.
+    """
     output = '('
     for precip in precip_selected:
         output += '\'' + precip + '\'' + ', '
@@ -48,14 +227,10 @@ def get_precip_types(precip_selected):
     return output
 
 
-def get_sort_from_train_num(train_num):
-    if int(train_num) % 2 == 0:
-        return 'nb_stop_num'
-    else:
-        return 'sb_stop_num'
-
-
 def get_sort_from_direction(direction):
+    """
+    Calculate direction from even/oddness of train_num.
+    """
     if direction == 'Northbound':
         return 'nb_stop_num'
     else:
