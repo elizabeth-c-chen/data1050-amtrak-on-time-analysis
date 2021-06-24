@@ -57,7 +57,7 @@ scheduler = APScheduler()
 scheduler.init_app(app)
 
 
-@scheduler.task('cron', id='etl_and_join', hour=10) # UTC Time (6am EST)
+@scheduler.task('cron', id='etl_and_join', hour=10)  # UTC Time (6am EST)
 def cron_etl_job():
     conn = psycopg2.connect(os.environ.get('DATABASE_URL'), sslmode='require')
     if conn:
@@ -721,11 +721,177 @@ def enable_send_query(active_tab, n_clicks, selected_date, train_num, year_range
 # ABOUT PROJECT PAGE
 #############################
 
+# I had to do this in a very unelegant manner because of an issue with link styling and dropdown menu 
+# link styling interactions. It would be nicer to use Markdown here but would not style properly!
+
+about_project = html.Div(
+    [
+        html.H4(html.B("About the Project")),
+        html.P(
+            """
+            This project was completed for the course DATA 1050: Data Engineering as part of the Master's
+            program in Data Science at Brown University. The goal of the assignment was to create a data
+            science web application that showcases the dataset in an interesting and informative way, and
+            allows for users to interact with the data and choose different aspects of the data being
+            visualized.
+            """
+        ),
+        html.Br(),
+        html.P(
+            """
+            My vision for this project was to merge historical train delay data for Amtrak's Northeast
+            Regional trains with associated weather data and create a way to understand the effects of
+            weather conditions on the Northeast Regional's on-time performance. Having frequently
+            traveled as a passenger on Amtrak's Northeast Regional and Acela trains since I started at
+            Brown as a first-year student, I was inspired to explore the performance of trains along
+            the route when compared with the associated historical weather data. I chose to focus on
+            the route between Boston, Massachussets and Washington, D.C. and most intermediate stations.
+            The data collected spans from 2011 to the present and is being updated on a daily basis. 
+            """
+        ),
+        html.Br(),
+        html.P(
+            """
+            I hope to extend this project with improvements and enhancements in the future. Some ideas
+            for additions include: 
+            """
+        ),
+        html.Ul(
+            [
+                html.Li(
+                    """
+                    Trying various machine learning techniques and time series analysis on the dataset with
+                    the goal of predicting whether or not a train will be delayed by more than a certain number
+                    of minutes
+                    """
+                ),
+                html.Li(
+                    """
+                    A trip simulator where users can set specific trip parameters (origin and destination
+                    station, time of day and weekday, weather conditions, etc.) and receive an estimate for
+                    likelihood of delays.
+                    """
+                ),
+                html.Li(
+                    """
+                    Ability for any user to choose variables from the dataset and create graphs and figures
+                    from the selected data
+                    """
+                ),
+                html.Li(
+                    """
+                    Adding more data sources and variables such as information from the NOAA Severe Weather
+                    Data Inventory, national holidays and other major events, and others
+                    """
+                )
+            ],
+            style={'margin-left': '35px'}
+        ),
+        html.H5(html.B("Thank you!")),
+        html.P(
+            [
+                "This project would not be possible without the diligent joint effort by ",
+                html.A(
+                    "Chris Juckins", 
+                    href="https://juckins.net/index.php",
+                    className='underlined-text'
+                    ),
+                " and ",
+                html.A(
+                    "John Bobinyec",
+                    href="http://dixielandsoftware.net/Amtrak/status/StatusMaps/",
+                    className='underlined-text'
+                ),
+                " to collect and preserve Amtrak's on-time performance records. ",
+                """I am extremely grateful for Chris' enthusiastic support of my project and for 
+                allowing me to use data from his website. The train data is sourced from """,
+                html.A(
+                    "Amtrak Status Maps Archive Database (ASMAD)",
+                    href="https://juckins.net/amtrak_status/archive/html/home.php",
+                    className='underlined-text'
+                ),
+                " on Chris Juckins' website. The weather data is sourced from ",
+                html.A(
+                    "Visual Crossing's Weather API",
+                    href="https://www.visualcrossing.com",
+                    className='underlined-text'
+                ),
+                """. The geospatial data used to create the route visualization and stations along 
+                the route was retrieved from the U.S. Department of Transportation's
+                """,
+                html.A(
+                    "Open Data Catalog",
+                    href="https://data-usdot.opendata.arcgis.com",
+                    className='underlined-text'
+                ),
+                "."
+            ]
+        )
+    ]
+)
+
 
 #############################
 # TECHNICAL DETAILS PAGE
 #############################
 
+details = html.Div(
+    [
+        html.H4(html.B("Technical Details")),
+        html.H5("Datasets Used"),
+        html.P(
+            """
+            The datasets used in this project include Amtrak train arrival and departure data, weather data, 
+            and geographic information files containing the route and station coordinates for the Northeast 
+            Regional route. 
+            """
+        ),
+        html.H5("Project Architecture"),
+        html.P(
+            """
+            The diagram below shows an overview of the project architecture. This project was written entirely 
+            in Python and uses the Plotly and Dash libraries to create the interactive website. The application 
+            uses a Postgres database and is hosted on Heroku. New data corresponding to trains and weather 
+            observations from the previous day are loaded into the database automatically each morning.
+            """
+        ),
+        html.Img(
+            src="./assets/Project_Architecture.pdf",
+            title='Project Architecture',
+            style={
+                'width': '97%'
+            }
+        ),
+        html.H5("Data Acquisition and Database Schema"),
+        html.P(
+            """
+            The train and weather data are retrieved using GET requests to the Amtrak Status Maps Archive Database (ASMAD)
+            and Visual Crossing API, respectively. All available past data was initially loaded into the database, and 
+            each morning after ASMAD updates, the application submits a query for the previous day's train and weather 
+            data and processes this data, then loads it into the database. Initially the weather and train data are in 
+            separate tables, but the data is later joined and inserted into another table which stores the joined data. The
+            data which is shown in the Visualization upon loading is saved as a file rather than loaded via a query to the
+            database to reduce the initial loading time.
+            """
+
+        ),
+        html.P("The database table structure is shown in the diagram below."),
+        html.Img(
+            src="./assets/Database_Schema.pdf",
+            title='Database Schema',
+            style={
+                'width': '97%'
+            }
+        ),
+        html.H5("Source Code"),
+        html.P(
+            """ 
+            The final versions of code I wrote for this project, as well as Jupyter notebooks of my work can be viewed 
+            by visiting links in the "View Source Code" dropdown menu in the navigation bar above.
+            """
+        )
+    ]
+)
 
 #############################
 # NAVIGATION
@@ -738,7 +904,7 @@ nav = dbc.Nav(
             href="/data1050-app-about"
         )),
         dbc.NavItem(dbc.NavLink(
-            "More Technical Details",
+            "Project Technical Details",
             active="exact",
             href="/data1050-app-details"
         )),
@@ -760,18 +926,19 @@ nav = dbc.Nav(
                     id="button-link"
                 ),
                 dbc.DropdownMenuItem(
-                    "View Data Retrieval & Database Loading Notebook",
+                    "Notebook: Data Retrieval/Database Loading",
                     href="https://nbviewer.jupyter.org/github/elizabeth-c-chen/data1050-amtrak-on-time-analysis/blob/master/EDA_ETL.ipynb",
                     id="button-link"
                 ),
                 dbc.DropdownMenuItem(
-                    "View Setup Work for Route Visualization Notebook",
+                    "Notebook: Setup Work for Route Visualization",
                     href="https://nbviewer.jupyter.org/github/elizabeth-c-chen/data1050-amtrak-on-time-analysis/blob/master/Determine_Station_Paths.ipynb",
                     id="button-link"
                 )
             ],
             label="View Source Code",
             nav=True
+
         ),
     ],
     pills=True,
@@ -834,9 +1001,14 @@ data1050_app_about_layout = dbc.Container(
         nav,
         dbc.Row(
             [
-                dbc.Col(unfinished, md=12, lg=12)
+                dbc.Col(about_project, md=10, lg=9)
             ],
-            no_gutters=False
+            no_gutters=False,
+            style={
+                'display': 'block',
+                'margin-left': '20%',
+                'margin-right': '0%'
+            }
         ),
         dbc.Row(
             [
@@ -876,9 +1048,14 @@ data1050_app_details_layout = dbc.Container(
         nav,
         dbc.Row(
             [
-                dbc.Col(unfinished, md=12, lg=12)
+                dbc.Col(details, md=10, lg=9)
             ],
-            no_gutters=False
+            no_gutters=False,
+            style={
+                'display': 'block',
+                'margin-left': '20%',
+                'margin-right': 'auto'
+            }
         ),
         dbc.Row(
             [
