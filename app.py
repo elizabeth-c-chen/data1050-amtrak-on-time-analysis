@@ -146,7 +146,7 @@ BUTTON_STYLE = {
     'margin-top': '2.5%'
 }
 FIGURE_STYLE = {
-    'height': 550,
+    'height': 600,
     'width': 1000
 }
 MAPBOX_STYLE = 'mapbox://styles/elizabethchen/ckpwqldby4ta317nj9xfc1eeu'
@@ -156,11 +156,11 @@ MARKER_STYLE = {
     'color': CONTRAST_COLOR
 }
 PATH_STYLE = {'width': 3.5}
-ZOOM_LEVEL = 6.25
+ZOOM_LEVEL = 6.15
 FIGURE_LAYOUT_STYLE = {
     'paper_bgcolor': 'white',
     'plot_bgcolor': 'white',
-    'margin': dict(t=5, l=75, b=0, r=0)
+    'margin': dict(t=30, l=75, b=30, r=0)
 }
 INSTRUCTION_STYLE = {'font-size': 15}
 INPUT_STYLE = {"margin-right": "10px"}
@@ -203,14 +203,15 @@ route.add_trace(
 )
 
 route.update_layout(FIGURE_LAYOUT_STYLE)
-
+route.update_traces(line=PATH_STYLE)
 route.update_yaxes(automargin=True)
+
 
 config = dict({'scrollZoom': False})
 
 div_alert = html.Div(
     dbc.Alert(
-        "Showing results from default selection.",
+        "Showing results from default selection. (Hover over the station markers to view average delay information.)",
         color="info",
         dismissable=True
     ),
@@ -391,7 +392,7 @@ def generate_query(n_clicks, direction, days, weather_type):
         exec_time = t1 - t0
         query_size = int(counts.sum())
         alert = dbc.Alert(
-            f"Queried {query_size} records. Total time: {exec_time:.2f}s.",
+            f"Queried {query_size} records. (Hover over the station markers to view average delay information.)",
             color="success",
             dismissable=True
         )
