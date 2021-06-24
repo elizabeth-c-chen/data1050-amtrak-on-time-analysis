@@ -491,9 +491,8 @@ enhancement_view = dbc.Card(
         ),
         dbc.CardBody(
             [
-                html.H5(
-                    "Changing Query Settings on the left will enable you to view specific\
-                         data against historical averages."
+                html.H6(
+                    "Change the settings on the left."
                 )
             ],
             id="card-content"
