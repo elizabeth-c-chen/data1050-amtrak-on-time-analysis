@@ -402,6 +402,8 @@ def generate_query(n_clicks, direction, days, weather_type):
 #############################
 # ENHANCEMENT PAGE
 #############################
+max_datetime = datetime.now()-timedelta(days=1, hours=6, minutes=5)  # To ensure data exists at query time
+max_date = max_datetime.date()
 specific_trip_controls = dbc.Card(
     [
         html.H6(
@@ -421,7 +423,7 @@ specific_trip_controls = dbc.Card(
             id="single-trip-date-picker",
             display_format="MMMM Do, YYYY",
             min_date_allowed=date(2011, 1, 1),
-            max_date_allowed=date.today()-timedelta(days=1),
+            max_date_allowed=max_date,
             initial_visible_month=date.today(),
             placeholder="Select or type a date (ex. July 4th, 2020)",
             persistence=True,
@@ -885,7 +887,7 @@ details = html.Div(
         html.H5("Source Code"),
         html.P(
             """ 
-            The final versions of code I wrote for this project, as well as Jupyter notebooks of my work can be viewed 
+            The final versions of code I wrote for this project––as well as Jupyter notebooks of my work––can be viewed 
             by visiting links in the "View Source Code" dropdown menu in the navigation bar above.
             """
         )
