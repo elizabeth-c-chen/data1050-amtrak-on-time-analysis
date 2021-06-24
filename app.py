@@ -57,7 +57,7 @@ scheduler = APScheduler()
 scheduler.init_app(app)
 
 
-@scheduler.task('cron', id='etl_and_join', hour=10)  # UTC Time (6am EST)
+@scheduler.task('cron', id='etl_and_join', hour=6)
 def cron_etl_job():
     conn = psycopg2.connect(os.environ.get('DATABASE_URL'), sslmode='require')
     if conn:
@@ -147,7 +147,7 @@ BUTTON_STYLE = {
 }
 FIGURE_STYLE = {
     'height': 550,
-    'width': 950
+    'width': 1000
 }
 MAPBOX_STYLE = 'mapbox://styles/elizabethchen/ckpwqldby4ta317nj9xfc1eeu'
 CONTRAST_COLOR = 'navy'
@@ -156,15 +156,15 @@ MARKER_STYLE = {
     'color': CONTRAST_COLOR
 }
 PATH_STYLE = {'width': 3.5}
-ZOOM_LEVEL = 6.0
+ZOOM_LEVEL = 6.25
 FIGURE_LAYOUT_STYLE = {
     'paper_bgcolor': 'white',
     'plot_bgcolor': 'white',
-    'margin': dict(t=35, l=80, b=0, r=0)
+    'margin': dict(t=5, l=75, b=0, r=0)
 }
 INSTRUCTION_STYLE = {'font-size': 15}
 INPUT_STYLE = {"margin-right": "10px"}
-
+SHOW_THIS_PAGE_ON_LOAD = "/data1050"
 
 #############################
 # VISUALIZATION PAGE
@@ -279,10 +279,9 @@ controls = dbc.Card(
                     options=[
                         {'label': 'No Precipitation', 'value': 'None'},
                         {'label': 'Rain', 'value': 'Rain'},
-                        {'label': 'Snow', 'value': 'Snow'},
-                        {'label': 'Other', 'value': 'Other'}
+                        {'label': 'Snow', 'value': 'Snow'}
                     ],
-                    value=['None', 'Rain', 'Snow', 'Other'],
+                    value=['None', 'Rain', 'Snow'],
                     inputStyle=INPUT_STYLE,
                     style=OPTION_STYLE
                 )
@@ -402,110 +401,156 @@ def generate_query(n_clicks, direction, days, weather_type):
 #############################
 # ENHANCEMENT PAGE
 #############################
-max_datetime = datetime.now()-timedelta(days=1, hours=6, minutes=5)  # To ensure data exists at query time
-max_date = max_datetime.date()
-specific_trip_controls = dbc.Card(
-    [
-        html.H6(
-            html.B("Query Settings")
-        ),
-        html.P(
-            html.B(
-                "Start by selecting date from the calendar below.",
-                style=INSTRUCTION_STYLE
-            )
-        ),
-        dbc.Label(
-            "1. Select a date to view past train trips.",
-            style=OPTION_LABEL_STYLE_WITH_DOWN_MARGIN
-        ),
-        dcc.DatePickerSingle(
-            id="single-trip-date-picker",
-            display_format="MMMM Do, YYYY",
-            min_date_allowed=date(2011, 1, 1),
-            max_date_allowed=max_date,
-            initial_visible_month=date.today(),
-            placeholder="Select or type a date (ex. July 4th, 2020)",
-            persistence=True,
-            persistence_type='session'
-        ),
-        dbc.Label(
-            "2. Select a train trip from the selected date.",
-            id="step-2-label",
-            style=OPTION_LABEL_STYLE_WITH_UP_DOWN_MARGIN
-        ),
-        dcc.Dropdown(
-            disabled=False,
-            id='train-num-picker',
-            searchable=True,
-            clearable=False,
-            placeholder="Select a train number",
-            persistence=True,
-            persistence_type='local'
-        ),
-        dbc.Label(
-            "3. Select a range of years to compare this trip with historical data.",
-            id="step-3-label",
-            style=OPTION_LABEL_STYLE_WITH_UP_DOWN_MARGIN
-        ),
-        dcc.RangeSlider(
-            min=2011,
-            max=2021,
-            value=[2011, 2019],
-            marks={
-                year: {'label': str(year)} for year in range(2011, 2022)
-            },
-            id="historical-range-slider",
-            persistence=True
-        ),
-        dbc.Button(
-            "Submit Query and View Results",
-            id="enhancement-send-query-button",
-            color="primary",
-            style=BUTTON_STYLE,
-            disabled=True
-        )
-    ],
-    body=True
-)
 
-enhancement_view = dbc.Card(
-    [
-        dcc.Store(id="store", storage_type='session'),
-        dbc.CardHeader(
-            dbc.Tabs(
-                [
-                    dbc.Tab(
-                        label="View Trip Data",
-                        tab_id="trip"),
-                    dbc.Tab(
-                        label="View Historical Averages",
-                        tab_id="history"),
-                    dbc.Tab(
-                        label="View Database Query",
-                        tab_id="query")
-                ],
-                id="card-tabs",
-                card=True,
-                active_tab="trip",
-                persistence=False
-            )
-        ),
-        dbc.CardBody(
-            [
-                html.H6(
-                    "Change the settings on the left."
+# To ensure data exists at query time I had to make a function to return this layout
+def return_enhancement_view():
+    max_datetime = datetime.now()-timedelta(days=1, hours=6, minutes=5)
+    print(datetime.now())
+    max_date = max_datetime.date()
+    specific_trip_controls = dbc.Card(
+        [
+            html.H6(
+                html.B("Query Settings")
+            ),
+            html.P(
+                html.B(
+                    "Start by selecting date from the calendar below.",
+                    style=INSTRUCTION_STYLE
                 )
-            ],
-            id="card-content"
-        )
-    ],
-    body=True,
-    id="enhancement-view",
-    style={'height': 'auto'}
-)
+            ),
+            dbc.Label(
+                "1. Select a date to view past train trips.",
+                style=OPTION_LABEL_STYLE_WITH_DOWN_MARGIN
+            ),
+            dcc.DatePickerSingle(
+                id="single-trip-date-picker",
+                display_format="MMMM Do, YYYY",
+                min_date_allowed=date(2011, 1, 1),
+                max_date_allowed=max_date,
+                initial_visible_month=date.today(),
+                placeholder="Select or type a date (ex. July 4th, 2020)",
+                persistence=True,
+                persistence_type='session'
+            ),
+            dbc.Label(
+                "2. Select a train trip from the selected date.",
+                id="step-2-label",
+                style=OPTION_LABEL_STYLE_WITH_UP_DOWN_MARGIN
+            ),
+            dcc.Dropdown(
+                disabled=False,
+                id='train-num-picker',
+                searchable=True,
+                clearable=False,
+                placeholder="Select a train number",
+                persistence=True,
+                persistence_type='local'
+            ),
+            dbc.Label(
+                "3. Select a range of years to compare this trip with historical data.",
+                id="step-3-label",
+                style=OPTION_LABEL_STYLE_WITH_UP_DOWN_MARGIN
+            ),
+            dcc.RangeSlider(
+                min=2011,
+                max=2021,
+                value=[2011, 2019],
+                marks={
+                    year: {'label': str(year)} for year in range(2011, 2022)
+                },
+                id="historical-range-slider",
+                persistence=True
+            ),
+            dbc.Button(
+                "Submit Query and View Results",
+                id="enhancement-send-query-button",
+                color="primary",
+                style=BUTTON_STYLE,
+                disabled=True
+            )
+        ],
+        body=True
+    )
+    enhancement_view = dbc.Card(
+        [
+            dcc.Store(id="store", storage_type='session'),
+            dbc.CardHeader(
+                dbc.Tabs(
+                    [
+                        dbc.Tab(
+                            label="View Trip Data",
+                            tab_id="trip"),
+                        dbc.Tab(
+                            label="View Historical Averages",
+                            tab_id="history"),
+                        dbc.Tab(
+                            label="View Database Query",
+                            tab_id="query")
+                    ],
+                    id="card-tabs",
+                    card=True,
+                    active_tab="trip",
+                    persistence=False
+                )
+            ),
+            dbc.CardBody(
+                [
+                    html.H6(
+                        "Change the settings on the left."
+                    )
+                ],
+                id="card-content"
+            )
+        ],
+        body=True,
+        id="enhancement-view",
+        style={'height': 'auto'}
+    )
 
-enhancement_alert = html.Div(id="enhancement-alert")
+    enhancement_alert = html.Div(id="enhancement-alert")
+    data1050_app_enhancement_layout = dbc.Container(
+        [
+            html.H3(
+                html.A(
+                    "Amtrak Northeast Regional On-Time Performance Explorer",
+                    href=SHOW_THIS_PAGE_ON_LOAD
+                )
+            ),
+            html.H5(
+                "Final Project for DATA 1050 by Elizabeth C. Chen",
+                style={
+                    'padding-top': '-10px',
+                    'padding-bottom': '-10px'
+                }
+            ),
+            nav,
+            dbc.Row(
+                [
+                    dbc.Col([specific_trip_controls, enhancement_alert], md=5, lg=4),
+                    dbc.Col(enhancement_view, md=7, lg=8)
+                ],
+                no_gutters=False
+            ),
+            dbc.Row(
+                [
+                    html.P(
+                        "You are visiting the portfolio of Elizabeth C. Chen, Master's \
+                        student at Brown University. This webpage is not affiliated with \
+                        Amtrak in any way.",
+                        style={
+                            'font-size': 12,
+                            'display': 'block',
+                            'padding-top': '3%',
+                            'margin-left': 'auto',
+                            'margin-right': 'auto'
+                        }
+                    )
+                ]
+            )
+        ],
+        fluid=True
+    )
+    return data1050_app_enhancement_layout
 
 
 @app.callback(
@@ -718,71 +763,80 @@ def enable_send_query(active_tab, n_clicks, selected_date, train_num, year_range
         )
         return [html.H6("Change the settings on the left!")], None, alert
 
+
 #############################
 # ABOUT PROJECT PAGE
 #############################
 
-# I had to do this in a very unelegant manner because of an issue with link styling and dropdown menu 
-# link styling interactions. It would be nicer to use Markdown here but would not style properly!
+# I had to do this in a very unelegant manner because of an issue with link styling
+# and dropdown menu link styling interactions. It would be nicer to use Markdown
+#  here but would not style properly!
 
 about_project = html.Div(
     [
         html.H4(html.B("About the Project")),
         html.P(
+            [
+                """
+                This project was completed for the course DATA 1050: Data Engineering as part of the
+                Master's program in Data Science at Brown University. The goal of the assignment was
+                to create a data science web application that showcases the dataset in an
+                interesting and informative way, and allows for users to interact with the data and
+                choose different aspects of the data being visualized. The detailed project
+                requirements can be viewed
+                """,
+                html.A("here", href="./assets/ProjectHandout.pdf", className='underlined-text'),
+                "."
+            ]
+
+        ),
+        html.Br(),
+        html.P(
             """
-            This project was completed for the course DATA 1050: Data Engineering as part of the Master's
-            program in Data Science at Brown University. The goal of the assignment was to create a data
-            science web application that showcases the dataset in an interesting and informative way, and
-            allows for users to interact with the data and choose different aspects of the data being
-            visualized.
+            My vision for this project was to merge historical train delay data for Amtrak's
+            Northeast Regional trains with associated weather data and create a way to
+            understand the effects of weather conditions on the Northeast Regional's on-time
+            performance. Having frequently traveled as a passenger on Amtrak's Northeast
+            Regional and Acela trains since I started at Brown as a first-year student,
+            I was inspired to explore the performance of trains along the route when compared
+            with the associated historical weather data. I chose to focus on the route between
+            Boston, Massachussets and Washington, D.C. and most intermediate stations. The data
+            collected spans from 2011 to the present and is being updated on a daily basis.
             """
         ),
         html.Br(),
         html.P(
             """
-            My vision for this project was to merge historical train delay data for Amtrak's Northeast
-            Regional trains with associated weather data and create a way to understand the effects of
-            weather conditions on the Northeast Regional's on-time performance. Having frequently
-            traveled as a passenger on Amtrak's Northeast Regional and Acela trains since I started at
-            Brown as a first-year student, I was inspired to explore the performance of trains along
-            the route when compared with the associated historical weather data. I chose to focus on
-            the route between Boston, Massachussets and Washington, D.C. and most intermediate stations.
-            The data collected spans from 2011 to the present and is being updated on a daily basis. 
-            """
-        ),
-        html.Br(),
-        html.P(
-            """
-            I hope to extend this project with improvements and enhancements in the future. Some ideas
-            for additions include: 
+            I hope to extend this project with improvements and enhancements in the future.
+            Some ideas for additions include:
             """
         ),
         html.Ul(
             [
                 html.Li(
                     """
-                    Trying various machine learning techniques and time series analysis on the dataset with
-                    the goal of predicting whether or not a train will be delayed by more than a certain number
-                    of minutes
+                    Trying various machine learning techniques and time series analysis on the
+                    dataset with the goal of predicting whether or not a train will be delayed
+                    by more than a certain number of minutes
                     """
                 ),
                 html.Li(
                     """
-                    A trip simulator where users can set specific trip parameters (origin and destination
-                    station, time of day and weekday, weather conditions, etc.) and receive an estimate for
-                    likelihood of delays.
+                    A trip simulator where users can set specific trip parameters (origin and
+                    destination station, time of day and weekday, weather conditions, etc.)
+                    and receive an estimate for likelihood of delays.
                     """
                 ),
                 html.Li(
                     """
-                    Ability for any user to choose variables from the dataset and create graphs and figures
-                    from the selected data
+                    Ability for any user to choose variables from the dataset and create graphs and
+                    figures from the selected data
                     """
                 ),
                 html.Li(
                     """
-                    Adding more data sources and variables such as information from the NOAA Severe Weather
-                    Data Inventory, national holidays and other major events, and others
+                    Adding more data sources and variables such as information from the NOAA Severe
+                    Weather Data Inventory, national holidays and other major events, and others
                     """
                 )
             ],
@@ -793,7 +847,7 @@ about_project = html.Div(
             [
                 "This project would not be possible without the diligent joint effort by ",
                 html.A(
-                    "Chris Juckins", 
+                    "Chris Juckins",
                     href="https://juckins.net/index.php",
                     className='underlined-text'
                     ),
@@ -804,8 +858,11 @@ about_project = html.Div(
                     className='underlined-text'
                 ),
                 " to collect and preserve Amtrak's on-time performance records. ",
-                """I am extremely grateful for Chris' enthusiastic support of my project and for 
-                allowing me to use data from his website. The train data is sourced from """,
+                """
+                I am extremely grateful for Chris' enthusiastic support of
+                my project and for allowing me to use data from his website.
+                The train data is sourced from
+                """,
                 html.A(
                     "Amtrak Status Maps Archive Database (ASMAD)",
                     href="https://juckins.net/amtrak_status/archive/html/home.php",
@@ -817,8 +874,10 @@ about_project = html.Div(
                     href="https://www.visualcrossing.com",
                     className='underlined-text'
                 ),
-                """. The geospatial data used to create the route visualization and stations along 
-                the route was retrieved from the U.S. Department of Transportation's
+                """
+                . The geospatial data used to create the route visualization
+                and stations along the route was retrieved from the U.S.
+                Department of Transportation's
                 """,
                 html.A(
                     "Open Data Catalog",
@@ -842,18 +901,19 @@ details = html.Div(
         html.H5("Datasets Used"),
         html.P(
             """
-            The datasets used in this project include Amtrak train arrival and departure data, weather data, 
-            and geographic information files containing the route and station coordinates for the Northeast 
-            Regional route. 
+            The datasets used in this project include Amtrak train arrival and departure data,
+            weather data, and geographic information files containing the route and station
+            coordinates for the Northeast Regional route.
             """
         ),
         html.H5("Project Architecture"),
         html.P(
             """
-            The diagram below shows an overview of the project architecture. This project was written entirely 
-            in Python and uses the Plotly and Dash libraries to create the interactive website. The application 
-            uses a Postgres database and is hosted on Heroku. New data corresponding to trains and weather 
-            observations from the previous day are loaded into the database automatically each morning.
+            The diagram below shows an overview of the project architecture. This project was
+            written entirely in Python and uses the Plotly and Dash libraries to create the
+            interactive website. The application uses a Postgres database and is hosted on
+            Heroku. New data corresponding to trains and weather observations from the
+            previous day are loaded into the database automatically each morning.
             """
         ),
         html.Img(
@@ -866,15 +926,16 @@ details = html.Div(
         html.H5("Data Acquisition and Database Schema"),
         html.P(
             """
-            The train and weather data are retrieved using GET requests to the Amtrak Status Maps Archive Database (ASMAD)
-            and Visual Crossing API, respectively. All available past data was initially loaded into the database, and 
-            each morning after ASMAD updates, the application submits a query for the previous day's train and weather 
-            data and processes this data, then loads it into the database. Initially the weather and train data are in 
-            separate tables, but the data is later joined and inserted into another table which stores the joined data. The
-            data which is shown in the Visualization upon loading is saved as a file rather than loaded via a query to the
+            The train and weather data are retrieved using GET requests to the Amtrak Status Maps
+            Archive Database (ASMAD) and Visual Crossing API, respectively. All available past
+            data was initially loaded into the database, and each morning after ASMAD updates,
+            the application submits a query for the previous day's train and weather data and
+            processes this data, then loads it into the database. Initially the weather and
+            train data are in separate tables, but the data is later joined and inserted into
+            another table which stores the joined data. The data which is shown in the
+            Visualization upon loading is saved as a file rather than loaded via a query to the
             database to reduce the initial loading time.
             """
-
         ),
         html.P("The database table structure is shown in the diagram below."),
         html.Img(
@@ -886,9 +947,10 @@ details = html.Div(
         ),
         html.H5("Source Code"),
         html.P(
-            """ 
-            The final versions of code I wrote for this project––as well as Jupyter notebooks of my work––can be viewed 
-            by visiting links in the "View Source Code" dropdown menu in the navigation bar above.
+            """
+            The final versions of code I wrote for this project, including the data retrieval
+            functions and Jupyter Notebooks of my work, can be viewed by visiting links in
+            the "View Source Code" dropdown menu in the navigation bar above.
             """
         )
     ]
@@ -912,7 +974,7 @@ nav = dbc.Nav(
         dbc.NavItem(dbc.NavLink(
             "On-Time Performance Visualizer",
             active="exact",
-            href="/data1050-app-viz"
+            href="/data1050"
         )),
         dbc.NavItem(dbc.NavLink(
             "On-Time Performance Comparison",
@@ -952,7 +1014,7 @@ nav = dbc.Nav(
 #############################
 # PAGE LAYOUTS
 #############################
-SHOW_THIS_PAGE_ON_LOAD = "/data1050-app-viz"
+SHOW_THIS_PAGE_ON_LOAD = "/data1050"
 
 index_page_layout = html.Div(
     [
@@ -981,8 +1043,6 @@ index_page_layout = html.Div(
         'margin-right': 'auto'
     }
 )
-
-unfinished = html.P("This page is coming soon!", style={'text-align': 'center', 'font-size': 50})
 
 data1050_app_about_layout = dbc.Container(
     [
@@ -1121,48 +1181,6 @@ data1050_app_viz_layout = dbc.Container(
     fluid=True
 )
 
-data1050_app_enhancement_layout = dbc.Container(
-    [
-        html.H3(
-            html.A(
-                "Amtrak Northeast Regional On-Time Performance Explorer",
-                href=SHOW_THIS_PAGE_ON_LOAD
-            )
-        ),
-        html.H5(
-            "Final Project for DATA 1050 by Elizabeth C. Chen",
-            style={
-                'padding-top': '-10px',
-                'padding-bottom': '-10px'
-            }
-        ),
-        nav,
-        dbc.Row(
-            [
-                dbc.Col([specific_trip_controls, enhancement_alert], md=5, lg=4),
-                dbc.Col(enhancement_view, md=7, lg=8)
-            ],
-            no_gutters=False
-        ),
-        dbc.Row(
-            [
-                html.P(
-                    "You are visiting the portfolio of Elizabeth C. Chen, Master's \
-                    student at Brown University. This webpage is not affiliated with \
-                    Amtrak in any way.",
-                    style={
-                        'font-size': 12,
-                        'display': 'block',
-                        'padding-top': '3%',
-                        'margin-left': 'auto',
-                        'margin-right': 'auto'
-                    }
-                )
-            ]
-        )
-    ],
-    fluid=True
-)
 
 error_page_layout = html.Div(
     [
@@ -1199,9 +1217,11 @@ def display_page(pathname):
         return data1050_app_about_layout
     elif pathname == '/data1050-app-details':
         return data1050_app_details_layout
-    elif pathname == '/data1050-app-viz':
+    elif pathname == '/data1050':
         return data1050_app_viz_layout
     elif pathname == '/data1050-app-analysis':
+        # This makes it so that the max_date_allowed for datepicker is always updated
+        data1050_app_enhancement_layout = return_enhancement_view()
         return data1050_app_enhancement_layout
     else:
         return error_page_layout

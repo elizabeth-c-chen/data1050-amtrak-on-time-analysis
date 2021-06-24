@@ -2,7 +2,6 @@ import os
 import sys
 import csv
 import psycopg2
-from datetime import datetime
 import pandas as pd
 import plotly
 import logging
@@ -143,7 +142,7 @@ def execute_command(conn, command):
         cur.execute(command)
         conn.commit()
     except (Exception, psycopg2.DatabaseError) as error:
-        logger.info(f"""{datetime.now()} | DATABASE ERROR: {error}""")
+        logger.info(f"""DATABASE ERROR: {error}""")
         conn.rollback()
 
 
@@ -159,7 +158,7 @@ def update_table(conn, command, csv_file):
             try:
                 cur.execute(command, tuple(row))
             except (Exception, psycopg2.DatabaseError) as error:
-                logger.info(f"""{datetime.now()} | DATABASE ERROR: {error}""")
+                logger.info(f"""DATABASE ERROR: {error}""")
                 conn.rollback()
         conn.commit()
 
@@ -176,7 +175,7 @@ def update_trains(conn, command, arr_or_dep, csv_file):
             try:
                 cur.execute(command, tuple([arr_or_dep] + row))
             except (Exception, psycopg2.DatabaseError) as error:
-                logger.info(f"""{datetime.now()} | DATABASE ERROR: {error}""")
+                logger.info(f"""DATABASE ERROR: {error}""")
                 conn.rollback()
         conn.commit()
 
@@ -258,37 +257,9 @@ def get_continuous_color(intermed):
     :rtype: str
     SOURCE: https://stackoverflow.com/questions/62710057/access-color-from-plotly-color-scale
     """
-    #colorscheme = plotly.colors.sequential.Turbo
     colorscheme = plotly.colors.diverging.RdYlGn
     colors, scale = plotly.colors.convert_colors_to_same_type(colorscheme)
     colorscale = plotly.colors.make_colorscale(colors, scale=scale)
-    # colorscale = [
-    #     [0.0, 'rgb(145,17,0)'],
-    #     [0.1, 'rgb(242,28,0)'],
-    #     [0.2, 'rgb(242,61,0)'],
-    #     [0.3, 'rgb(242,101,0)'],
-    #     [0.4, 'rgb(242,133,0)'],
-    #     [0.5, 'rgb(242,170,0)'],
-    #     [0.6, 'rgb(240, 192, 0'],
-    #     [0.7, 'rgb(242,226,0)'],
-    #     [0.8, 'rgb(202,242,0)'],
-    #     [0.9, 'rgb(137,242,0)'],
-    #     [1.0, 'rgb(28,242,0)']
-    # ]
-    # colorscale = [
-    #     [0.0, 'rgb(28,242,0)'],
-    #     [0.1, 'rgb(137,242,0)'],
-    #     [0.2, 'rgb(202,242,0)'],
-    #     [0.3, 'rgb(242,226,0)'],
-    #     [0.4, 'rgb(240,192,0)'],
-    #     [0.5, 'rgb(242,170,0)'],
-    #     [0.6, 'rgb(242,133,0)'],
-    #     [0.7, 'rgb(242,101,0)'],
-    #     [0.8, 'rgb(242,61,0)'],
-    #     [0.9, 'rgb(242,28,0)'],
-    #     [1.0, 'rgb(145,17,0)'],
-    # ]
-
     if intermed <= 0:
         return colorscale[0][1]
     if intermed >= 1:

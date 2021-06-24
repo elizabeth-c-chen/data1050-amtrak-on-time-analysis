@@ -340,6 +340,6 @@ def ETL_previous_day_train_data(conn):
     full_arrive.to_csv('/tmp/arrive_yesterday.csv', line_terminator='\n', index=False)
     full_depart.to_csv('/tmp/depart_yesterday.csv', line_terminator='\n', index=False)
     update_trains(conn, insert_into_stops, 'Arrival', '/tmp/arrive_yesterday.csv')
-    logger.info(f"Successful ETL of yesterday's arrival data for (# Rows Kept: {full_arrive.shape[0]}/{arrive.shape[0]})")
+    logger.info(f"Successful ETL of yesterday's arrival data (# Rows Kept: {full_arrive.shape[0]}/{arrive.shape[0]})")
     update_trains(conn, insert_into_stops, 'Departure', '/tmp/depart_yesterday.csv')
-    logger.info(f"Successful ETL of yesterday's departure data for (# Rows Kept: {full_depart.shape[0]}/{depart.shape[0]})")
+    logger.info(f"Successful ETL of yesterday's departure data (# Rows Kept: {full_depart.shape[0]}/{depart.shape[0]})")
