@@ -57,7 +57,7 @@ scheduler = APScheduler()
 scheduler.init_app(app)
 
 
-@scheduler.task('cron', id='etl_and_join', hour=6)
+@scheduler.task('cron', id='etl_and_join', hour=12)
 def cron_etl_job():
     conn = psycopg2.connect(os.environ.get('DATABASE_URL'), sslmode='require')
     if conn:
@@ -405,8 +405,7 @@ def generate_query(n_clicks, direction, days, weather_type):
 
 # To ensure data exists at query time I had to make a function to return this layout
 def return_enhancement_view():
-    max_datetime = datetime.now()-timedelta(days=1, hours=6, minutes=5)
-    print(datetime.now())
+    max_datetime = datetime.now()-timedelta(days=1, hours=12)
     max_date = max_datetime.date()
     specific_trip_controls = dbc.Card(
         [
@@ -918,7 +917,7 @@ details = html.Div(
             """
         ),
         html.Img(
-            src="./assets/Project_Architecture.pdf",
+            src="./assets/Project_Architecture.png",
             title='Project Architecture',
             style={
                 'width': '97%'
@@ -940,7 +939,7 @@ details = html.Div(
         ),
         html.P("The database table structure is shown in the diagram below."),
         html.Img(
-            src="./assets/Database_Schema.pdf",
+            src="./assets/Database_Schema.png",
             title='Database Schema',
             style={
                 'width': '97%'

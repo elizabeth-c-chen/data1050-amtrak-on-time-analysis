@@ -185,7 +185,7 @@ def join_datasets(conn):
     Join stops and weather tables and update the precipitation column.
     """
     execute_command(conn, join_command)
-    execute_command(conn, remove_duplicates)
+    #execute_command(conn, remove_duplicates)
     execute_command(conn, update_precip)
     logger.info("Successful join of new stops and weather data.")
 
