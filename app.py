@@ -1,5 +1,4 @@
 import os
-import time
 import logging
 from datetime import date, timedelta, datetime
 from textwrap import dedent
@@ -24,7 +23,6 @@ from utils import connect_and_query, get_colors, get_days, get_precip_types, \
 
 from trains_ETL import ETL_previous_day_train_data
 from weather_ETL import ETL_previous_day_weather_data
-
 
 #############################
 # DASH SETUP
@@ -353,7 +351,6 @@ def generate_query(n_clicks, direction, days, weather_type):
             """
         )
         try:
-            t0 = time.time()
             query_df = connect_and_query(query)
             assert query_df.shape[0] > 0
         except AssertionError:
@@ -388,8 +385,6 @@ def generate_query(n_clicks, direction, days, weather_type):
         )
         route.update_layout(FIGURE_LAYOUT_STYLE)
         route.update_yaxes(automargin=True)
-        t1 = time.time()
-        exec_time = t1 - t0
         query_size = int(counts.sum())
         alert = dbc.Alert(
             f"Queried {query_size} records. (Hover over the station markers to view average delay information.)",
@@ -800,7 +795,7 @@ about_project = html.Div(
             Regional and Acela trains since I started at Brown as a first-year student,
             I was inspired to explore the performance of trains along the route when compared
             with the associated historical weather data. I chose to focus on the route between
-            Boston, Massachussets and Washington, D.C. and most intermediate stations. The data
+            Boston, Massachusetts and Washington, D.C. and most intermediate stations. The data
             collected spans from 2011 to the present and is being updated on a daily basis.
             """
         ),
@@ -860,8 +855,9 @@ about_project = html.Div(
                 " to collect and preserve Amtrak's on-time performance records. ",
                 """
                 I am extremely grateful for Chris' enthusiastic support of
-                my project and for allowing me to use data from his website.
-                The train data is sourced from
+                my project and for allowing me to use data from his website. The 
+                timetable archives were also an invaluable source of information for
+                me while working on this project. The train data is sourced from
                 """,
                 html.A(
                     "Amtrak Status Maps Archive Database (ASMAD)",
@@ -913,7 +909,7 @@ details = html.Div(
             written entirely in Python and uses the Plotly and Dash libraries to create the
             interactive website. The application uses a Postgres database and is hosted on
             Heroku. New data corresponding to trains and weather observations from the
-            previous day are loaded into the database automatically each morning.
+            previous day are loaded into the database automatically each day at noon.
             """
         ),
         html.Img(
@@ -928,7 +924,7 @@ details = html.Div(
             """
             The train and weather data are retrieved using GET requests to the Amtrak Status Maps
             Archive Database (ASMAD) and Visual Crossing API, respectively. All available past
-            data was initially loaded into the database, and each morning after ASMAD updates,
+            data was initially loaded into the database, and each day after ASMAD updates,
             the application submits a query for the previous day's train and weather data and
             processes this data, then loads it into the database. Initially the weather and
             train data are in separate tables, but the data is later joined and inserted into
@@ -937,7 +933,14 @@ details = html.Div(
             database to reduce the initial loading time.
             """
         ),
-        html.P("The database table structure is shown in the diagram below."),
+        html.P(
+            """
+            The database table structure is shown in the diagram below. An index on the train number
+            field speeds up query time significantly in the On-Time Performance Analysis section, and
+            indexes on precipitation type and day of week also show some performance improvements for 
+            the Visualization queries.
+            """
+        ),
         html.Img(
             src="./assets/Database_Schema.png",
             title='Database Schema',
@@ -964,12 +967,12 @@ nav = dbc.Nav(
         dbc.NavItem(dbc.NavLink(
             "About the Project",
             active="exact",
-            href="/data1050-app-about"
+            href="/data1050-about"
         )),
         dbc.NavItem(dbc.NavLink(
             "Project Technical Details",
             active="exact",
-            href="/data1050-app-details"
+            href="/data1050-details"
         )),
         dbc.NavItem(dbc.NavLink(
             "On-Time Performance Visualizer",
@@ -979,7 +982,7 @@ nav = dbc.Nav(
         dbc.NavItem(dbc.NavLink(
             "On-Time Performance Comparison",
             active="exact",
-            href="/data1050-app-analysis"
+            href="/data1050-compare"
         )),
         dbc.DropdownMenu(
             [
@@ -1213,13 +1216,13 @@ error_page_layout = html.Div(
 def display_page(pathname):
     if pathname == '/':
         return index_page_layout
-    elif pathname == '/data1050-app-about':
+    elif pathname == '/data1050-about':
         return data1050_app_about_layout
-    elif pathname == '/data1050-app-details':
+    elif pathname == '/data1050-details':
         return data1050_app_details_layout
     elif pathname == '/data1050':
         return data1050_app_viz_layout
-    elif pathname == '/data1050-app-analysis':
+    elif pathname == '/data1050-compare':
         # This makes it so that the max_date_allowed for datepicker is always updated
         data1050_app_enhancement_layout = return_enhancement_view()
         return data1050_app_enhancement_layout
@@ -1228,4 +1231,4 @@ def display_page(pathname):
 
 
 if __name__ == '__main__':
-    app.run_server(port=8050, debug=True)
+    app.run_server(port=8050, debug=False)
