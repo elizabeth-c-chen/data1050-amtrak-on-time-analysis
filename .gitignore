@@ -3,8 +3,8 @@ Untitled*
 logfile
 amtrak-project.code-workspace
 __pycache__/
-data/
 local/
 *db/
 *.css
+old/
 etl.log

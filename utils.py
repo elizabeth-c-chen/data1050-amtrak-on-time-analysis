@@ -185,7 +185,7 @@ def join_datasets(conn):
     Join stops and weather tables and update the precipitation column.
     """
     execute_command(conn, join_command)
-    #execute_command(conn, remove_duplicates)
+    execute_command(conn, remove_duplicates)
     execute_command(conn, update_precip)
     logger.info("Successful join of new stops and weather data.")
 
@@ -195,6 +195,7 @@ def connect_and_query(query):
     Connect to the PostgreSQL database and submit query and return the results.
     """
     conn = psycopg2.connect(os.environ.get('DATABASE_URL'), sslmode='require')
+    # conn = psycopg2.connect(dbname="amtrakproject", user="elizabethchen")
     query_data = pd.read_sql(query, conn)
     conn.close()
     return query_data
@@ -278,12 +279,16 @@ def get_continuous_color(intermed):
         colortype="rgb")
 
 
+def get_default_colors(stations_list, color):
+    color_dict = {station_code: color for station_code in stations_list}
+    return color_dict
+
+
 def get_colors(geo_route, query_df):
     """
     Create the path color groups according to data from query.
     """
     direction = query_df['Direction'].iloc[0]
-
     if direction == 'Northbound':
         color_group_key = 'NB Station Group'
         arrival_station = 'BOS'
@@ -292,7 +297,7 @@ def get_colors(geo_route, query_df):
         arrival_station = 'WAS'
     station_column = geo_route[color_group_key]
     delays = query_df['Average Delay']
-    colors_dict = {station: 'rgb(0,0,0)' for station in station_column.unique()}
+    colors_dict = {station: 'rgb(0, 30, 105)' for station in station_column.unique()}  # default color
     counts = query_df['Num Records']
     delays_return = pd.Series(index=query_df['Station'], name='Delay Minutes')
     counts_return = pd.Series(index=query_df['Station'], name='Num Records')
