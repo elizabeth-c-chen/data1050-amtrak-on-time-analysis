@@ -5,6 +5,8 @@ import psycopg2
 import pandas as pd
 import plotly
 import logging
+import datetime
+
 
 assert os.environ.get('DATABASE_URL') is not None, 'database URL is not set!'
 
@@ -130,6 +132,18 @@ update_precip = """
                 """
 
 
+insert_into_logs = """
+                   INSERT INTO 
+                       query_logs (
+                           submit_datetime,
+                           sql_content
+                       )
+                   VALUES
+                        (%s, %s)
+                   ON CONFLICT DO NOTHING;
+                   """
+
+
 ##############################
 # Database operation functions
 ##############################
@@ -179,6 +193,21 @@ def update_trains(conn, command, arr_or_dep, csv_file):
                 conn.rollback()
         conn.commit()
 
+def update_logs(conn, user_query):
+    """
+    Insert user's query into the logs table.
+    """
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            insert_into_logs,
+            tuple([datetime.datetime.now(datetime.timezone.utc), user_query])
+        )
+        conn.commit()
+    except (Exception, psycopg2.DatabaseError) as error:
+        print(error)
+        conn.rollback()
+
 
 def join_datasets(conn):
     """
@@ -190,12 +219,13 @@ def join_datasets(conn):
     logger.info("Successful join of new stops and weather data.")
 
 
-def connect_and_query(query):
+def connect_and_query(query, is_primary=False):
     """
     Connect to the PostgreSQL database and submit query and return the results.
     """
     conn = psycopg2.connect(os.environ.get('DATABASE_URL'), sslmode='require')
-    # conn = psycopg2.connect(dbname="amtrakproject", user="elizabethchen")
+    if is_primary:
+        update_logs(conn, query)
     query_data = pd.read_sql(query, conn)
     conn.close()
     return query_data

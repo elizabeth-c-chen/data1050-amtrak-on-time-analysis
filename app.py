@@ -48,6 +48,10 @@ app = Dash(
         {
             'name': 'viewport',
             'content': 'width=device-width, initial-scale=1.0, shrink-to-fit=no'
+        },
+        {
+            'name': 'theme-color',
+            'content': '#001e69'
         }
     ]
 )
@@ -60,6 +64,9 @@ app.layout = html.Div(
         html.Div(id="page-content")
     ]
 )
+
+app.css.append_css({"external_url": "https://codepen.io/chriddyp/pen/brPBPO.css"})
+
 
 app.index_string = '''
 <!DOCTYPE html>
@@ -281,7 +288,7 @@ div_alert = html.Div(
         ],
         color="info",
         className=ALERT_CLASSNAME,
-        duration=4000,
+        duration=7000,
     ),
     id="alert-msg",
 )
@@ -359,14 +366,22 @@ controls = dbc.Card(
         ),
         dbc.Row(
             dbc.Col(
-                dbc.Button(
-                    "Submit Query and Plot Results",
-                    id="send-query-button",
-                    color="primary",
-                    className="submit-btn"
+                html.Div(
+                    [
+                        dbc.Button(
+                            html.P(
+                                "Submit Query and Plot Results",
+                                style={'font-size': '1vw', 'color': 'white'}
+                            ),
+                            id="send-query-button",
+                            color="primary",
+                            className="submit-btn"
+                        ),
+                    ],
                 )
+                
             )
-        ),
+        )
     ],
     id="controls",
     body=True
@@ -374,12 +389,21 @@ controls = dbc.Card(
 
 viz = dbc.Card(
     [
-        dcc.Graph(
-            id="geo-route",
-            config=config,
-            figure=route,
-            style=FIGURE_STYLE,
-            responsive=True,
+        html.Div(
+            id="loading-wrapper",
+            children= [
+                dcc.Loading(
+                    dcc.Graph(
+                        id="geo-route",
+                        config=config,
+                        figure=route,
+                        style=FIGURE_STYLE,
+                        responsive=True,
+                    ),
+                    type="circle",
+                    style={"background-color":"transparent"},  
+                )
+            ]
         )
     ],
     body=True
@@ -422,7 +446,7 @@ def generate_query(n_clicks, direction, days, weather_type):
             """
         )
         try:
-            query_df = connect_and_query(query)
+            query_df = connect_and_query(query, is_primary=True)
             assert query_df.shape[0] > 0
         except AssertionError:
             raise dash.exceptions.PreventUpdate
@@ -459,16 +483,14 @@ def generate_query(n_clicks, direction, days, weather_type):
         route.update_layout(FIGURE_LAYOUT_STYLE)
         route.update_yaxes(automargin=True)
         query_size = int(counts.sum())
-        alert = dbc.Alert(
-            [
-                f"Queried {query_size} records. (Hover over station markers to view average delay information.)",
-            ],
+        msg = dbc.Alert(
+            [f"Queried {query_size} records. (Hover over station markers to view average delay information.)"],
             color="success",
             className=ALERT_CLASSNAME,
-            duration=4000,
+            duration=7000
         )
-    return alert, route
 
+    return msg, route
 
 #############################
 # ENHANCEMENT PAGE
@@ -553,6 +575,7 @@ specific_trip_controls = dbc.Card(
             id="enhancement-send-query-button",
             color="primary",
             className="submit-btn",
+            style={'font-size': '1vw', 'color': 'white'},
             disabled=True
         ),
     ],
@@ -669,7 +692,7 @@ def enable_send_query(
                     {sort_stop_num} ASC, arrival_or_departure ASC;
                 """
             )
-            single_trip_df = connect_and_query(single_trip_query)
+            single_trip_df = connect_and_query(single_trip_query, is_primary=True)
             if single_trip_df.shape[0] == 0:
                 error_view = [
                     html.H6(
@@ -684,11 +707,11 @@ def enable_send_query(
                         """
                     ],
                     color="warning",
-                    duration=4000,
+                    duration=7000,
                     className=ALERT_CLASSNAME,
                 )
                 return error_view, None, alert
-            historical_df = connect_and_query(historical_query)
+            historical_df = connect_and_query(historical_query, is_primary=True)
             fmt_date = datetime.strptime(selected_date, "%Y-%m-%d").strftime(
                 "%b %d, %Y"
             )
@@ -702,6 +725,7 @@ def enable_send_query(
                     style_header={"backgroundColor": "rgb(183,224,248)"},
                     style_cell=dict(textAlign="left", fontSize="11.5px"),
                     sort_action="native",
+                    id="data-table"
                 ),
             ]
             if year_range[0] == year_range[1]:
@@ -719,6 +743,7 @@ def enable_send_query(
                     style_header={"backgroundColor": "rgb(183,224,248)"},
                     style_cell=dict(textAlign="left", fontSize="13px"),
                     sort_action="native",
+                    id="data-table"
                 ),
             ]
             query_view = [
@@ -740,7 +765,7 @@ def enable_send_query(
                     f"Successfully queried database for Train {train_num} on {fmt_date}."
                 ],
                 color="success",
-                duration=4000,
+                duration=7000,
                 className=ALERT_CLASSNAME,
             )
             return stored_views[active_tab], stored_views, alert
@@ -755,7 +780,7 @@ def enable_send_query(
                             {train_num} on {fmt_date}",
                     ],
                     color="info",
-                    duration=4000,
+                    duration=7000,
                     className=ALERT_CLASSNAME,
                 )
                 return stored_views[active_tab], stored_views, alert
@@ -765,7 +790,7 @@ def enable_send_query(
                         "Hint: Change the settings above to view and compare data.",
                     ],
                     color="info",
-                    duration=4000,
+                    duration=7000,
                     className=ALERT_CLASSNAME,
                 )
                 return [html.H6("Change the settings on the left!")], None, alert
@@ -775,7 +800,7 @@ def enable_send_query(
                     "Hint: Change the settings above to view and compare data."
                 ],
                 color="info",
-                duration=4000,
+                duration=7000,
                 className=ALERT_CLASSNAME,
             )
             return [html.H6("Change the settings on the left!")], None, alert
@@ -785,7 +810,7 @@ def enable_send_query(
                 "Hint: Change the settings above to view and compare data."
             ],
             color="info",
-            duration=4000,
+            duration=7000,
             className=ALERT_CLASSNAME,
         )
         return [html.H6("Change the settings on the left!")], None, alert
