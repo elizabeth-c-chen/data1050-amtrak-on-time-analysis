@@ -30,7 +30,8 @@ app = Dash(
     update_title=None,
     external_stylesheets=[
         dbc.icons.BOOTSTRAP,
-        "/assets/bootstrap-modified.css"
+        "/assets/bootstrap-modified.css",
+        "https://codepen.io/chriddyp/pen/brPBPO.css"
     ],
     meta_tags=[
         {
@@ -64,9 +65,6 @@ app.layout = html.Div(
         html.Div(id="page-content")
     ]
 )
-
-app.css.append_css({"external_url": "https://codepen.io/chriddyp/pen/brPBPO.css"})
-
 
 app.index_string = '''
 <!DOCTYPE html>
@@ -555,7 +553,7 @@ specific_trip_controls = dbc.Card(
             clearable=False,
             placeholder="Choose from dropdown",
             persistence=True,
-            persistence_type="local",
+            persistence_type="session",
         ),
         dbc.Label(
             "3. Select a range of years to compare this trip with historical data.",
@@ -569,6 +567,7 @@ specific_trip_controls = dbc.Card(
             marks={year: {"label": str(year)} for year in range(2011, 2022)},
             id="historical-range-slider",
             persistence=True,
+            persistence_type="session"
         ),
         dbc.Button(
             "Submit Query and View Results",
