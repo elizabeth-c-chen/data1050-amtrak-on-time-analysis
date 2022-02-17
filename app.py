@@ -30,8 +30,7 @@ app = Dash(
     update_title=None,
     external_stylesheets=[
         dbc.icons.BOOTSTRAP,
-        "/assets/bootstrap-modified.css",
-        "https://codepen.io/chriddyp/pen/brPBPO.css"
+        "/assets/bootstrap-modified.css"
     ],
     meta_tags=[
         {
@@ -1046,7 +1045,6 @@ home_nav = dbc.Nav(
             html.H4(
                 html.B("Project Links", style={'font-size': '30px', 'padding-bottom': '-1rem'})
             ),
-          #  id="project-links"
         ),
         dbc.NavItem(
             dbc.NavLink(
@@ -1095,6 +1093,19 @@ bio_text = html.Div(
                     children="GitHub profile",
                     className="underlined-text"),
                 "."
+            ],
+            className="font-size-par"
+        ),
+        html.Br(),
+        html.P(
+            [
+               "Please ",
+               html.A(
+                   href="mailto:elizabeth_chen@brown.edu",
+                   children="reach out",
+                   className="underlined-text"
+               ),
+               " if you'd like to chat! I'd love to hear from you."
             ],
             className="font-size-par"
         ),
