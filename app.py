@@ -123,7 +123,7 @@ geo_route = connect_and_query(geo_route_query)
 
 
 #############################
-# STYLING CONSTANTS
+# STYLING AND MISC CONSTANTS
 #############################
 INPUT_STYLE = {"margin-right": "10px"}
 FIGURE_STYLE = {"height": 560}
@@ -139,7 +139,8 @@ FIGURE_LAYOUT_STYLE = {
     "font": dict(size=10.5),
 }
 ALERT_CLASSNAME = "d-flex align-items-center"
-
+CONTACT_EMAIL = "elizabeth_chen"
+CONTACT_DOMAIN = "brown.edu"
 
 #############################
 # PATHNAME CONSTANTS
@@ -1101,7 +1102,7 @@ bio_text = html.Div(
             [
                "Please ",
                html.A(
-                   href="mailto:elizabeth_chen@brown.edu",
+                   href=f"mailto:{CONTACT_EMAIL}@{CONTACT_DOMAIN}",
                    children="reach out",
                    className="underlined-text"
                ),
