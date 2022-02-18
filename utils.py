@@ -15,7 +15,7 @@ assert os.environ.get('DATABASE_URL') is not None, 'database URL is not set!'
 # Set up logger
 #############################
 def setup_logger(logger, output_file):
-    logger.setLevel(logging.DEBUG)
+    logger.setLevel(logging.CRITICAL)
 
     stdout_handler = logging.StreamHandler(sys.stdout)
     stdout_handler.setFormatter(logging.Formatter('%(asctime)s [%(funcName)s]: %(message)s'))
@@ -131,19 +131,6 @@ update_precip = """
                     weather_type IS NOT NULL;
                 """
 
-
-insert_into_logs = """
-                   INSERT INTO 
-                       query_logs (
-                           submit_datetime,
-                           sql_content
-                       )
-                   VALUES
-                        (%s, %s)
-                   ON CONFLICT DO NOTHING;
-                   """
-
-
 ##############################
 # Database operation functions
 ##############################
@@ -224,8 +211,6 @@ def connect_and_query(query, is_primary=False):
     Connect to the PostgreSQL database and submit query and return the results.
     """
     conn = psycopg2.connect(os.environ.get('DATABASE_URL'), sslmode='require')
-    if is_primary:
-        update_logs(conn, query)
     query_data = pd.read_sql(query, conn)
     conn.close()
     return query_data
