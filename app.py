@@ -1096,20 +1096,7 @@ bio_text = html.Div(
                 "."
             ],
             className="font-size-par"
-        ),
-        html.Br(),
-        html.P(
-            [
-               "Please ",
-               html.A(
-                   href=f"mailto:{CONTACT_EMAIL}@{CONTACT_DOMAIN}",
-                   children="reach out",
-                   className="underlined-text"
-               ),
-               " if you'd like to chat! I'd love to hear from you."
-            ],
-            className="font-size-par"
-        ),
+        )
     ],
     className="margin-top-20"
 )
